@@ -285,11 +285,11 @@ static volatile bool pid_thd_stop;
 #define M_MOTOR(is_second_motor)  (((void)is_second_motor), &m_motor_1)
 #endif
 
-
-static bool lsb;
+// This is the noise bit for the PRBS generator
+static bool prbsNoiseBit;
 
 bool mcpwm_foc_get_prbs(void) {
-   return lsb;
+   return prbsNoiseBit;
 }
 
 /**
@@ -301,20 +301,20 @@ bool mcpwm_foc_get_prbs(void) {
  *        C.f. https://en.wikipedia.org/wiki/Linear-feedback_shift_register#Example_polynomials_for_maximal_LFSRs
  * @return -1 or 1
  */
-int32_t prbsGenerator11(void) {
+int32_t prbsGenerator11_increment(void) {
 	static uint32_t lfsr = 0x01;  /* Any nonzero start state less than 2^bits will work. */
 
 	const uint32_t taps =  (1<< (11-1)) | (1<<(9-1)); // https://en.wikipedia.org/wiki/Linear-feedback_shift_register#Example_polynomials_for_maximal_LFSRs
 
-	lsb = lfsr & 0x01;  // Get LSB (i.e., the output bit).
+	prbsNoiseBit = lfsr & 0x01;  // Get least-significant bit (i.e., the output bit).
 	lfsr >>= 1;  // Shift register
 
 	// Only apply toggle mask if output bit is 1.
-	if (lsb == true) {
+	if (prbsNoiseBit == true) {
 		lfsr ^= taps;  // Apply toggle mask, value has 1 at bits corresponding to taps, 0 elsewhere.
 	}
 
-	return (lsb == true) ? 1 : -1;
+	return (prbsNoiseBit == true) ? 1 : -1;
 }
 
 static void update_hfi_samples(foc_hfi_samples samples, volatile motor_all_state_t *motor) {
@@ -3813,16 +3813,16 @@ static void control_current(volatile motor_all_state_t *motor, float dt) {
 	utils_truncate_number_abs((float*)&vd_tmp, max_v_mag);
 	state_m->vd_int += (vd_tmp - vd_presat);
 
+	// max_vq^2 + vd_tmp^2 = max_v_mag^2, where v_d and max_v_mag come from prior in the code
 	float max_vq = sqrtf(SQ(max_v_mag) - SQ(vd_tmp));
 	float vq_presat = vq_tmp;
 	utils_truncate_number_abs((float*)&vq_tmp, max_vq);
 	state_m->vq_int += (vq_tmp - vq_presat);
 
-
 	float noiseScale = conf_now->foc_hfi_voltage_max;
 
 	// Generate PRBS noise
-	int noise = prbsGenerator11();
+	int noise = prbsGenerator11_increment();
 	state_m->vd = vd_tmp + noise * noiseScale;
 	state_m->vq = vq_tmp;
 
