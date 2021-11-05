@@ -3918,7 +3918,7 @@ static void control_current(volatile motor_all_state_t *motor, float dt) {
 	}
 
     //Just a quick and dirty test:
-    svm(-mod_alpha_tmp, -mod_beta_tmp, TIM1->ARR,
+    svm(-mod_alpha, -mod_beta, TIM1->ARR,
         (uint32_t*)&motor->m_duty1_next,
         (uint32_t*)&motor->m_duty2_next,
         (uint32_t*)&motor->m_duty3_next,
