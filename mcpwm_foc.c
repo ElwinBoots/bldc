@@ -3917,21 +3917,13 @@ static void control_current(volatile motor_all_state_t *motor, float dt) {
 		motor->m_hfi.prev_sample = 0.0;
 	}
 
-	// Set output (HW Dependent)
-	uint32_t duty1, duty2, duty3, top;
-	top = TIM1->ARR;
-	svm(-mod_alpha, -mod_beta, top, &duty1, &duty2, &duty3, (uint32_t*)&state_m->svm_sector);
-
-	if (motor == &m_motor_1) {
-		TIMER_UPDATE_DUTY_M1(duty1, duty2, duty3);
-#ifdef HW_HAS_DUAL_PARALLEL
-		TIMER_UPDATE_DUTY_M2(duty1, duty2, duty3);
-#endif
-	} else {
-#ifndef HW_HAS_DUAL_PARALLEL
-		TIMER_UPDATE_DUTY_M2(duty1, duty2, duty3);
-#endif
-	}
+    //Just a quick and dirty test:
+    svm(-mod_alpha_tmp, -mod_beta_tmp, TIM1->ARR,
+        (uint32_t*)&motor->m_duty1_next,
+        (uint32_t*)&motor->m_duty2_next,
+        (uint32_t*)&motor->m_duty3_next,
+        (uint32_t*)&state_m->svm_sector);
+    motor->m_duty_next_set = true;
 
 	// do not allow to turn on PWM outputs if virtual motor is used
 	if(virtual_motor_is_connected() == false) {
