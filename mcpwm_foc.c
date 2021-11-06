@@ -635,7 +635,7 @@ void mcpwm_foc_init(volatile mc_configuration *conf_m1, volatile mc_configuratio
 
 	utils_sys_unlock_cnt();
 
-	CURRENT_FILTER_ON();
+	CURRENT_FILTER_OFF();
 	ENABLE_GATE();
 	DCCAL_OFF();
 
@@ -2990,7 +2990,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 		}
 
 		// HFI Restore
-		CURRENT_FILTER_ON();
+		CURRENT_FILTER_OFF();
 		motor_now->m_hfi.ind = 0;
 		motor_now->m_hfi.ready = false;
 		motor_now->m_hfi.is_samp_n = false;
@@ -3910,7 +3910,7 @@ static void control_current(volatile motor_all_state_t *motor, float dt) {
 			motor->m_duty_next_set = true;
 		}
 	} else {
-		CURRENT_FILTER_ON();
+		CURRENT_FILTER_OFF();
 		motor->m_hfi.ind = 0;
 		motor->m_hfi.ready = false;
 		motor->m_hfi.is_samp_n = false;
