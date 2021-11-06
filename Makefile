@@ -7,13 +7,16 @@ export PROJECT ?= BLDC_4_ChibiOS
 WHEREAMI := $(dir $(lastword $(MAKEFILE_LIST)))
 ROOT_DIR := $(realpath $(WHEREAMI)/ )
 
-# import macros common to all supported build systems
-include $(ROOT_DIR)/make/system-id.mk
-
 # configure some directories that are relative to wherever ROOT_DIR is located
 TOOLS_DIR := $(ROOT_DIR)/tools
 BUILD_DIR := $(ROOT_DIR)/build
 DL_DIR    := $(ROOT_DIR)/downloads
+
+# import macros common to all supported build systems
+include $(ROOT_DIR)/make/system-id.mk
+
+# import macros that are OS specific
+include $(ROOT_DIR)/make/$(OSFAMILY).mk
 
 # include the tools makefile
 include $(ROOT_DIR)/make/tools.mk
@@ -84,10 +87,10 @@ help:
 
 
 $(DL_DIR):
-	mkdir -p $@
+	$(V1) $(MKDIR) $@
 
 $(TOOLS_DIR):
-	mkdir -p $@
+	$(V1) $(MKDIR) $@
 
 ##############################
 #

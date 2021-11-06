@@ -168,13 +168,13 @@ ifneq ($(USE_VERBOSE_COMPILE),yes)
 	@echo $(CC) -c $(CFLAGS) -I. $(IINCDIR) main.c -o main.o
 	@echo
 endif
-	@mkdir -p $(BUILDDIR)
+	@mkdir "$(BUILDDIR)"
 
 $(OBJDIR):
-	@mkdir -p $(OBJDIR)
+	@mkdir "$(OBJDIR)"
 
 $(LSTDIR):
-	@mkdir -p $(LSTDIR)
+	@mkdir "$(LSTDIR)"
 
 $(ACPPOBJS) : $(OBJDIR)/%.o : %.cpp Makefile
 ifeq ($(USE_VERBOSE_COMPILE),yes)

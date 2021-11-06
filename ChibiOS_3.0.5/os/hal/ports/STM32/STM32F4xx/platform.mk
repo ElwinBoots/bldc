@@ -1,6 +1,6 @@
 # List of all the STM32F2xx/STM32F4xx platform files.
 ifeq ($(USE_SMART_BUILD),yes)
-HALCONF := $(strip $(shell cat halconf.h | egrep -e "define"))
+HALCONF := $(strip $(shell pwsh -noprofile -command cat halconf.h | findstr -i define))
 
 PLATFORMSRC := $(CHIBIOS)/os/hal/ports/common/ARMCMx/nvic.c \
                $(CHIBIOS)/os/hal/ports/STM32/STM32F4xx/stm32_dma.c \
