@@ -3943,18 +3943,24 @@ static void control_current(volatile motor_all_state_t *motor, float dt) {
 	top = TIM1->ARR;
     
     // Calculate the duty cycles for all the phases. This also injects a zero modulation signal to be able to fully utilize the bus voltage. See https://microchipdeveloper.com/mct5001:start.
-	svm(-mod_alpha, -mod_beta, top, &duty1, &duty2, &duty3, (uint32_t*)&state_m->svm_sector);
+	//svm(-mod_alpha, -mod_beta, top, &duty1, &duty2, &duty3, (uint32_t*)&state_m->svm_sector);
 
-	if (motor == &m_motor_1) {
-		TIMER_UPDATE_DUTY_M1(duty1, duty2, duty3);
-#ifdef HW_HAS_DUAL_PARALLEL
-		TIMER_UPDATE_DUTY_M2(duty1, duty2, duty3);
-#endif
-	} else {
-#ifndef HW_HAS_DUAL_PARALLEL
-		TIMER_UPDATE_DUTY_M2(duty1, duty2, duty3);
-#endif
-	}
+    svm(-mod_alpha, -mod_beta, TIM1->ARR,
+        (uint32_t*)&motor->m_duty1_next,
+        (uint32_t*)&motor->m_duty2_next,
+        (uint32_t*)&motor->m_duty3_next,
+        (uint32_t*)&state_m->svm_sector);
+    motor->m_duty_next_set = true;
+	// if (motor == &m_motor_1) {
+		// TIMER_UPDATE_DUTY_M1(duty1, duty2, duty3);
+// #ifdef HW_HAS_DUAL_PARALLEL
+		// TIMER_UPDATE_DUTY_M2(duty1, duty2, duty3);
+// #endif
+	// } else {
+// #ifndef HW_HAS_DUAL_PARALLEL
+		// TIMER_UPDATE_DUTY_M2(duty1, duty2, duty3);
+// #endif
+	// }
 
 	// do not allow to turn on PWM outputs if virtual motor is used
 	if(virtual_motor_is_connected() == false) {
