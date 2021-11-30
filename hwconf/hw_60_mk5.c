@@ -118,6 +118,11 @@ void hw_init_gpio(void) {
 	PHASE_FILTER_OFF();
 #endif
 
+	// Debug pin, SCL 
+	palSetPadMode(HW_I2C_SCL_PORT, HW_I2C_SCL_PIN,
+			PAL_MODE_OUTPUT_PUSHPULL |
+			PAL_STM32_OSPEED_HIGHEST);
+			
 	// Fault pin
 	palSetPadMode(GPIOB, 7, PAL_MODE_INPUT_PULLUP);
 

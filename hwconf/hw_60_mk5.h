@@ -71,6 +71,8 @@
 #define PHASE_FILTER_OFF()		palClearPad(PHASE_FILTER_GPIO, PHASE_FILTER_PIN)
 #endif
 
+
+
 #if defined(HW60_IS_MK3) || defined(HW60_IS_MK4) || defined(HW60_IS_MK5)
 // Shutdown pin
 #define HW_SHUTDOWN_GPIO		GPIOC
@@ -222,7 +224,7 @@
 #define HW_UART_DEV				SD3
 #define HW_UART_GPIO_AF			GPIO_AF_USART3
 #define HW_UART_TX_PORT			GPIOB
-#define HW_UART_TX_PIN			10
+#define HW_UART_TX_PIN			11
 #define HW_UART_RX_PORT			GPIOB
 #define HW_UART_RX_PIN			11
 
@@ -379,5 +381,8 @@
 #if defined(HW60_IS_MK3) || defined(HW60_IS_MK4) || defined(HW60_IS_MK5)
 bool hw_sample_shutdown_button(void);
 #endif
+
+#define DEBUG_PIN_ON()		palSetPad(HW_I2C_SCL_PORT, HW_I2C_SCL_PIN)
+#define DEBUG_PIN_OFF()		palClearPad(HW_I2C_SCL_PORT, HW_I2C_SCL_PIN)
 
 #endif /* HW_60_H_ */

@@ -2495,7 +2495,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 	}
 #endif
 #endif
-
+	DEBUG_PIN_ON();
 	// Reset the watchdog
 	timeout_feed_WDT(THREAD_MCPWM);
 
@@ -3117,6 +3117,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 
 	m_isr_motor = 0;
 	m_last_adc_isr_duration = timer_seconds_elapsed_since(t_start);
+	DEBUG_PIN_OFF();
 }
 
 // Private functions
