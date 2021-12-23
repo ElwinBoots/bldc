@@ -922,7 +922,8 @@ void mcpwm_foc_set_pid_pos(float pos) {
 void mcpwm_foc_set_current(float current) {
 	motor_now()->m_control_mode = CONTROL_MODE_CURRENT;
 	motor_now()->m_iq_set = current;
-
+	motor_now()->m_id_set = 0;
+	
 	if (fabsf(current) < motor_now()->m_conf->cc_min_current) {
 		return;
 	}
@@ -1012,7 +1013,8 @@ void mcpwm_foc_set_openloop_phase(float current, float phase) {
 						  motor_now()->m_conf->l_current_max * motor_now()->m_conf->l_current_max_scale);
 
 	motor_now()->m_control_mode = CONTROL_MODE_OPENLOOP_PHASE;
-	motor_now()->m_iq_set = current;
+	motor_now()->m_id_set = current;
+	motor_now()->m_iq_set = 0;
 
 	motor_now()->m_openloop_phase = DEG2RAD_f(phase);
 	utils_norm_angle_rad((float*)&motor_now()->m_openloop_phase);
@@ -2793,7 +2795,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 
 		// Set motor phase
 		{
-			if (!motor_now->m_phase_override) {
+			if (!motor_now->m_phase_override & !(motor_now->m_control_mode == CONTROL_MODE_OPENLOOP_PHASE)) {
 				observer_update(motor_now->m_motor_state.v_alpha, motor_now->m_motor_state.v_beta,
 						motor_now->m_motor_state.i_alpha, motor_now->m_motor_state.i_beta, dt,
 						&motor_now->m_observer_x1, &motor_now->m_observer_x2, &motor_now->m_phase_now_observer, motor_now);
@@ -2818,7 +2820,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 					motor_now->m_motor_state.phase = motor_now->m_phase_now_encoder_no_index;
 				}
 
-				if (!motor_now->m_phase_override) {
+				if (!motor_now->m_phase_override & !(motor_now->m_control_mode == CONTROL_MODE_OPENLOOP_PHASE)) {
 					id_set_tmp = 0.0;
 				}
 				break;
@@ -2826,7 +2828,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 				motor_now->m_phase_now_observer = correct_hall(motor_now->m_phase_now_observer, dt, motor_now);
 				motor_now->m_motor_state.phase = motor_now->m_phase_now_observer;
 
-				if (!motor_now->m_phase_override) {
+				if (!motor_now->m_phase_override & !(motor_now->m_control_mode == CONTROL_MODE_OPENLOOP_PHASE)) {
 					id_set_tmp = 0.0;
 				}
 				break;
@@ -2839,7 +2841,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 					motor_now->m_motor_state.phase = motor_now->m_phase_now_observer;
 				}
 
-				if (!motor_now->m_phase_override) {
+				if (!motor_now->m_phase_override & !(motor_now->m_control_mode == CONTROL_MODE_OPENLOOP_PHASE)) {
 					id_set_tmp = 0.0;
 				}
 				break;
@@ -2856,7 +2858,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 					motor_now->m_phase_observer_override = false;
 				}
 
-				if (!motor_now->m_phase_override) {
+				if (!motor_now->m_phase_override & !(motor_now->m_control_mode == CONTROL_MODE_OPENLOOP_PHASE)) {
 					id_set_tmp = 0.0;
 				}
 				break;
@@ -2879,7 +2881,7 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 						conf_now->foc_sl_erpm_hfi,
 						motor_now);
 
-				if (!motor_now->m_phase_override) {
+				if (!motor_now->m_phase_override & !(motor_now->m_control_mode == CONTROL_MODE_OPENLOOP_PHASE)) {
 					id_set_tmp = 0.0;
 				}
 				break;
@@ -3208,6 +3210,7 @@ static void timer_update(volatile motor_all_state_t *motor, float dt) {
 					motor->m_control_mode == CONTROL_MODE_OPENLOOP ||
 					motor->m_control_mode == CONTROL_MODE_OPENLOOP_PHASE)) {
 		if (fabsf(motor->m_iq_set) < motor->m_conf->cc_min_current &&
+				fabsf(motor->m_id_set) < motor->m_conf->cc_min_current &&
 				motor->m_i_fw_set < motor->m_conf->cc_min_current &&
 				motor->m_current_off_delay < dt) {
 			motor->m_control_mode = CONTROL_MODE_NONE;
