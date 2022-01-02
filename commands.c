@@ -1976,7 +1976,7 @@ static THD_FUNCTION(blocking_thread, arg) {
 				float current = buffer_get_float32(data, 1e3, &ind);
 
 				mcconf->motor_type = MOTOR_TYPE_FOC;
-				mcconf->foc_f_sw = 10000.0;
+				mcconf->foc_f_sw = 5000.0;
 				mcconf->foc_current_kp = 0.01;
 				mcconf->foc_current_ki = 10.0;
 				mc_interface_set_configuration(mcconf);
@@ -2024,7 +2024,7 @@ static THD_FUNCTION(blocking_thread, arg) {
 				float current = buffer_get_float32(data, 1e3, &ind);
 
 				mcconf->motor_type = MOTOR_TYPE_FOC;
-				mcconf->foc_f_sw = 10000.0;
+				mcconf->foc_f_sw = 5000.0;
 				mcconf->foc_current_kp = 0.01;
 				mcconf->foc_current_ki = 10.0;
 				mc_interface_set_configuration(mcconf);
