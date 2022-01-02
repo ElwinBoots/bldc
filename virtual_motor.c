@@ -129,7 +129,7 @@ void virtual_motor_set_configuration(volatile mc_configuration *conf){
 	if (m_conf->foc_sample_v0_v7) {
 		virtual_motor.Ts = (0.5 / m_conf->foc_f_sw) ; //Sample time is half when measuring twice per period.
 	} else {
-		virtual_motor.Ts = (1.0 / (m_conf->foc_f_sw);
+		virtual_motor.Ts = (1.0 / m_conf->foc_f_sw);
 	}
 #else
 	virtual_motor.Ts = (1.0 / m_conf->foc_f_sw) ;  //Adjusted this to match foc_sample_v0_v7 disabled. Was a bug?
