@@ -101,6 +101,9 @@ package_dict["Little_FOCer"] = [['Little_FOCer', default_name]]
 package_dict["Little_FOCer_V3"] = [['Little_FOCer_V3', default_name]]
 package_dict["Little_FOCer_V3_1"] = [['Little_FOCer_V3_1', default_name]]
 package_dict["Little_FOCer_4"] = [['Little_FOCer_4', default_name]]
+package_dict["TRONIC_250R"] = [['TRONIC_250R', default_name]]
+package_dict["X12_PRO24"] = [['x12_pro24', default_name]]
+package_dict["X12_PRO30"] = [['x12_pro30', default_name]]
 package_dict["Thor300"] = [['Thor_300_20s', default_name]]
 package_dict["JetFleetF6"] = [['JetFleetF6', default_name]]
 package_dict["UXV_SR"] = [['uxv_sr', default_name]]
@@ -188,6 +191,7 @@ package_dict["VESC_BASIC"] = [['basic', default_name],
 package_dict["RSR_DD_V1"] = [['RSR_DD_V1', default_name],
                     ['RSR_DD_V1_005', 'RSR_DD_V1_005.bin']]
 package_dict["RSR_DD_V2"] = [['RSR_DD_V2', default_name]]
+package_dict["RSR_DD_V2.1"] = [['RSR_DD_V2.1', default_name]]
 
 # This is the firmware stub string
 res_firmwares_string = '        <file>TARGET_DESTINATION_DIRECTORY/TARGET_DESTINATION_FILENAME</file>\n'

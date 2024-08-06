@@ -313,6 +313,20 @@ Start or stop balancing. 1 means start and 0 means stop.
 
 ---
 
+#### bms-zero-offset
+
+| Platforms | Firmware |
+|---|---|
+| ESC, Express | 6.05+ |
+
+```clj
+(bms-zero-offset)
+```
+
+Zero current measurement offset on BMS. Has to be done while no current (or charge-current on charge-only BMS) is flowing. Will be sent to every BMS on the CAN-bus.
+
+---
+
 #### get-adc
 
 | Platforms | Firmware |
@@ -3103,6 +3117,34 @@ Read state of pin. Returns 1 if the pin is high, 0 otherwise.
 
 ---
 
+#### gpio-hold
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.05+ |
+
+```clj
+(gpio-hold pin state)
+```
+
+It state is 1, the state of pin will be locked to its state at the moment of the call. If state is 0 the pin will be unlocked. The state persists through reset, but not through deep sleep.
+
+---
+
+#### gpio-hold-deepsleep
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.05+ |
+
+```clj
+(gpio-hold-deepsleep state)
+```
+
+It state is 1, all digital pads will hold their state during deep sleep. If it is set to 0 they will reset to their initial state when entering deep sleep.
+
+---
+
 ### Pulse-Width Modulation (PWM)
 
 A logic-level PWM-signal can be created on GPIO-pins for controlling various accessories. The Express-platform supports up to 4 PWM-channels on any pins and the ESC-platform supports only one PWM-channel on the servo-pin. The arguments prefixed with express in the following functions are ignored on the ESC-platform.
@@ -3399,6 +3441,7 @@ The following selection of app and motor parameters can be read and set from Lis
 'foc-offsets-cal-on-boot ; Measure offsets at boot (Added in FW 6.05)
 'foc-fw-current-max     ; Maximum field weakening current (Added in FW 6.05)
 'foc-fw-duty-start      ; Duty where field weakening starts (Added in FW 6.05)
+'foc-short-ls-on-zero-duty ; Short low-side FETs on 0 duty (Added in FW 6.05)
 'min-speed              ; Minimum speed in meters per second (a negative value)
 'max-speed              ; Maximum speed in meters per second
 'app-to-use             ; App to use
@@ -3506,6 +3549,7 @@ The following selection of app and motor parameters can be read and set from Lis
                         ; 0: Disabled
                         ; 1: Enabled
                         ; 2: Enabled and encrypted with pin
+                        ; 3: Enabled with scripting
 'ble-name               ; Device name (also the name that shows up in VESC Tool)
 'ble-pin                ; BLE pin code
 ```
@@ -5846,6 +5890,34 @@ Set wifi bandwidth in MHz. This function is experimental and should only be used
 
 ---
 
+#### wifi-stop
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.05+ |
+
+```clj
+(wifi-stop)
+```
+
+Stop wifi-driver. Reduces power consumption.
+
+---
+
+#### wifi-start
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.05+ |
+
+```clj
+(wifi-start)
+```
+
+Start wifi-driver. Re-connects to networks that were connected before. Can be used to restart wifi after sleep-light.
+
+---
+
 ### Receiving Data
 
 Events can be used to receive ESP-NOW data. This is best described with an example:
@@ -5895,6 +5967,20 @@ Connect SD-card on pin-mosi, pin-miso, pin-sck and pin-cs. The optional argument
 
 ---
 
+#### f-connect-nand
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.05+ |
+
+```clj
+(f-connect-nand pin-mosi pin-miso pin-sck pin-cs optSpiSpeed)
+```
+
+Connect NAND-flash memory on pin-mosi, pin-miso, pin-sck and pin-cs. The optional argument optSpiSpeed can be used to specify the SPI speed (default 20000 Hz). Returns true on success, nil otherwise.
+
+---
+
 #### f-disconnect
 
 | Platforms | Firmware |
@@ -5905,7 +5991,7 @@ Connect SD-card on pin-mosi, pin-miso, pin-sck and pin-cs. The optional argument
 (f-disconnect)
 ```
 
-Disconnect SD-card.
+Disconnect SD-card or NAND-Flash.
 
 ---
 
@@ -6709,7 +6795,21 @@ Example:
 (sleep-deep time)
 ```
 
-Put the CPU in deep sleep mode for time seconds. If time is negative the CPU will sleep forever, or until a wakeup pin triggers a wakeup.
+Put the CPU in deep sleep mode for time seconds. If time is negative the CPU will sleep forever, or until a wakeup pin triggers a wakeup. Waking up from sleep-deep results in a complete reset.
+
+---
+
+#### sleep-light
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.05+ |
+
+```clj
+(sleep-light time)
+```
+
+Put the CPU in light sleep mode for time seconds. Waking up will return to the point where sleep-light was called without a complete reset, but the power draw is much higher than for sleep-deep. Note that wifi and bluetooth are disabled when using this function, so they have to be enabled again when waking up.
 
 ---
 
