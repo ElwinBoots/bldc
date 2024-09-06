@@ -643,6 +643,21 @@ static lbm_value ext_print(lbm_value *args, lbm_uint argn) {
 	return ENC_SYM_TRUE;
 }
 
+static char print_prefix[50] = {0};
+
+static lbm_value ext_set_print_prefix(lbm_value *args, lbm_uint argn) {
+	LBM_CHECK_ARGN(1);
+
+	if (!lbm_is_array_r(args[0])) {
+		return ENC_SYM_TERROR;
+	}
+
+	const char *string = lbm_dec_str(args[0]);
+	strncpy(print_prefix, string, sizeof(print_prefix) - 1);
+
+	return ENC_SYM_TRUE;
+}
+
 /**
  * signature: (puts string)
  *
@@ -4451,7 +4466,6 @@ lbm_value ext_lbm_set_gc_stack_size(lbm_value *args, lbm_uint argn) {
 				lbm_free(lbm_heap_state.gc_stack.data);
 				lbm_heap_state.gc_stack.data = new_stack;
 				lbm_heap_state.gc_stack.size = n;
-				lbm_heap_state.gc_stack.max_sp = 0;
 				lbm_heap_state.gc_stack.sp = 0;
 				return ENC_SYM_TRUE;
 			}
@@ -5268,6 +5282,7 @@ void lispif_load_vesc_extensions(void) {
 
 	// Various commands
 	lbm_add_extension("print", ext_print);
+	lbm_add_extension("set-print-prefix", ext_set_print_prefix);
 	lbm_add_extension("puts", ext_puts);
 	lbm_add_extension("timeout-reset", ext_reset_timeout);
 	lbm_add_extension("get-ppm", ext_get_ppm);
@@ -5749,6 +5764,11 @@ bool lispif_symbol_to_io(lbm_uint sym, stm32_gpio_t **port, uint32_t *pin) {
 	}
 #endif
 	return false;
+}
+
+char* lispif_print_prefix(void) {
+	print_prefix[sizeof(print_prefix) - 1] = 0;
+	return print_prefix;
 }
 
 #pragma GCC pop_options
