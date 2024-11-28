@@ -676,6 +676,7 @@ Read system info parameter param. Example:
 (sysinfo 'has-phase-filters) ; t if hardware has phase filters. ESC only.
 (sysinfo 'uuid) ; STM32 UUID. ESC only.
 (sysinfo 'runtime) ; Total runtime in seconds. ESC only.
+(sysinfo 'odometer) ; Total odometer in meters. ESC only. Added in 6.06.
 (sysinfo 'git-branch) ; Git branch name. ESC only.
 (sysinfo 'git-hash) ; Git hash of current commit. ESC only.
 (sysinfo 'compiler) ; GCC version, e.g. 7.3.1. ESC only.
@@ -709,6 +710,20 @@ Get statistics about the selected motor since boot (or since stats-reset). The f
 (stats 'stat-temp-motor-max) ; Maximum motor temp in degC
 (stats 'stat-count-time) ; Time since start of stat collection in seconds
 ```
+
+---
+
+#### set-odometer
+
+| Platforms | Firmware |
+|---|---|
+| ESC | 6.06+ |
+
+```clj
+(set-odometer meters)
+```
+
+Set persistent odometer counter to meters.
 
 ---
 
@@ -779,6 +794,22 @@ Returns true when the main-function is done with all initialization.
 ```
 
 Hold shutdown. When hold is true hardware shutdown will be delayed until hold is set to false again. Can be used when catching a shutdown-event if more time is needed for cleanup.
+
+---
+
+#### const-heap-erase
+
+| Platforms | Firmware |
+|---|---|
+| ESC | 6.06+ |
+
+```clj
+(const-heap-erase)
+```
+
+Erase constant heap. This can be used in the beginning of the application to erase the constant memory of the application. That is useful for applications that do not always write the same things to constant memory in the same order after starting. Situations where that can occur is when the application takes different execution paths depending on external events or when writing variables to constant memory that differ based on external events.
+
+Running this command in the beginning of the application should prevent any write-to-flash errors, but the command takes a few seconds to execute and puts some wear on the flash memory. The reader will become slightly slower in const blocks after running this command compared to an application where constant memory already has been written in previous runs.
 
 ---
 
@@ -1335,6 +1366,26 @@ Get FOC estimated motor inductance Henry. Only works while the first HFI is runn
 
 ---
 
+#### get-hfi-res
+
+| Platforms | Firmware |
+|---|---|
+| ESC | 6.06+ |
+
+```clj
+(get-hfi-res)
+```
+
+Get HFI result. Only valid when using single or double pulse ambiguity resolution mode. Returns a list with the following valies:
+
+```clj
+(i1 i2 diff)
+```
+
+Where i1 is the delta current for the first voltage, i2 is the response current for the second voltage and diff is the difference between them. This can be used to determine how much ambiguity resolution current is required for a given motor.
+
+---
+
 #### get-duty
 
 | Platforms | Firmware |
@@ -1391,6 +1442,20 @@ Same as get-rpm-fast, but with even less filtering. This give the RPM-estimation
 
 ---
 
+#### get-rpm-set
+
+| Platforms | Firmware |
+|---|---|
+| ESC | 6.06+ |
+
+```clj
+(get-rpm-set)
+```
+
+Get motor ERPM setpoint for PID speed controller.
+
+---
+
 #### get-pos
 
 | Platforms | Firmware |
@@ -1444,6 +1509,20 @@ Get motor temperature.
 ```
 
 Get speed in meters per second. Requires that the number of motor poles, wheel diameter and gear ratio are set up correctly.
+
+---
+
+#### get-speed-set
+
+| Platforms | Firmware |
+|---|---|
+| ESC | 6.06+ |
+
+```clj
+(get-speed-set)
+```
+
+Get PID speed setpoint in meters per second. Requires that the number of motor poles, wheel diameter and gear ratio are set up correctly.
 
 ---
 
@@ -3452,6 +3531,12 @@ The following selection of app and motor parameters can be read and set from Lis
 'foc-motor-r            ; Motor resistance in milliOhm
 'foc-motor-flux-linkage ; Motor flux linkage in milliWeber
 'foc-observer-gain      ; Observer gain x1M
+'foc-hfi-amb-mode       ; HFI Ambiguity Resolve Mode (FW 6.06)
+                        ; 0 : Six Vector
+                        ; 1 : ID Single Pulse
+                        ; 2 : ID Double Pulse
+'foc-hfi-amb-current    ; HFI Ambiguity Resolve Current (FW 6.06)
+'foc-hfi-amb-tres       ; HFI Ambiguity Resolve Threshold (FW 6.06)
 'foc-hfi-voltage-start  ; HFI start voltage (V) (for resolving ambiguity)
 'foc-hfi-voltage-run    ; HFI voltage (V) HFI voltage at min current
 'foc-hfi-voltage-max    ; HFI voltage (V) at max current
@@ -3473,7 +3558,11 @@ The following selection of app and motor parameters can be read and set from Lis
 'foc-sl-openloop-time   ; Stay in openloop for this amount of time
 'foc-temp-comp          ; Use observer temperature compensation
 'foc-temp-comp-base-temp ; Temperature at which parameters were measured
-'foc-offsets-cal-on-boot ; Measure offsets at boot (Added in FW 6.05)
+'foc-offsets-cal-on-boot ; Measure offsets at boot (FW 6.05 only)
+'foc-offsets-cal-mode   ; Offset Calibration Mode (Added in FW 6.06)
+                        ; Bit 0: Calibrate on Boot
+                        ; Bit 1: Enable Write from VESC Tool
+                        ; Bit 2: Auto-calibrate when undriven
 'foc-fw-current-max     ; Maximum field weakening current (Added in FW 6.05)
 'foc-fw-duty-start      ; Duty where field weakening starts (Added in FW 6.05)
 'foc-short-ls-on-zero-duty ; Short low-side FETs on 0 duty (Added in FW 6.05)
@@ -3492,6 +3581,7 @@ The following selection of app and motor parameters can be read and set from Lis
                         ;    9: APP_PAS
                         ;    10: APP_ADC_PAS
 'controller-id          ; VESC CAN ID
+'timeout-msec           ; Motor timeout in milliseconds (Added in FW 6.06)
 'can-baud-rate          ; CAN-bus baud rate (Added in FW 6.05)
                         ; 0: 125K
                         ; 1: 250K
@@ -4032,6 +4122,34 @@ Example that forever prints "Hello World" every two seconds:
                 (print "Hello World")
                 (sleep 2)
 })))
+```
+
+From firmware 6.06 it is possible to give the thread a name and/or a stack size. That gives the following combinations of possibilities:
+
+```clj
+; No name and default stack size
+(loopwhile-thd () t {
+        (print "Hello World1")
+        (sleep 2)
+})
+
+; No name and stack size 100
+(loopwhile-thd 100 t {
+        (print "Hello Worl2")
+        (sleep 2)
+})
+
+; Name ThdTest and default stack size
+(loopwhile-thd "ThdTest" t {
+        (print "Hello World3")
+        (sleep 2)
+})
+
+; Name ThdTest2 and stack size 100
+(loopwhile-thd ("ThdTest2" 100) t {
+        (print "Hello World4")
+        (sleep 2)
+})
 ```
 
 ---
@@ -6816,6 +6934,46 @@ Example:
 
 ---
 
+## Crypto
+
+---
+
+#### aes-ctr-crypt
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(aes-ctr-crypt key counter data start-offset length)
+```
+
+Performs in-place AES-CTR (128/192/256) encryption/decryption. Counter will also be updated.
+
+Example:
+
+```clj
+(def data [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15]) 
+(def key [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15]) 
+(def counter [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15])
+(def start-offset 5)
+(def len 6)
+; Encrypt data
+(aes-ctr-crypt key counter data start-offset len)
+(print data)
+> [0 1 2 3 4 15 146 12 189 72 100 11 12 13 14 15]
+(print counter)
+> [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 16]
+; Reset counter
+(setq counter [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15])
+; Decrypt data
+(aes-ctr-crypt key counter data start-offset len)
+(print data)
+> [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15]
+```
+
+---
+
 ## Sleep Modes
 
 ---
@@ -6893,7 +7051,21 @@ Returns a 4k byte array from RTC memory that can be used as a general purpose ar
 Check if any client (e.g. VESC Tool) is connected over wifi. Returns true when connected, nil otherwise.
 
 ---
-´
+
+#### connected-hub
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(connected-hub)
+```
+
+Check if we are connected to the TCP hub. Returns true when connected, nil otherwise. Notice that this does not tell if someone is connected to us using the hub, it only tells that we are connected to the hub and that others can connect to us.
+
+---
+
 #### connected-ble
 
 | Platforms | Firmware |

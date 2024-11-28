@@ -540,7 +540,8 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 	case COMM_SET_MCCONF: {
 #ifndef	HW_MCCONF_READ_ONLY
 		mc_configuration *mcconf = mempools_alloc_mcconf();
-		*mcconf = *mc_interface_get_configuration();
+		volatile const mc_configuration *mcconf_old = mc_interface_get_configuration();
+		*mcconf = *mcconf_old;
 
 		if (confgenerator_deserialize_mcconf(data, mcconf)) {
 			utils_truncate_number(&mcconf->l_current_max_scale , 0.0, 1.0);
@@ -554,6 +555,21 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 			mcconf->lo_current_min = mcconf->l_current_min * mcconf->l_current_min_scale;
 			mcconf->lo_in_current_max = mcconf->l_in_current_max;
 			mcconf->lo_in_current_min = mcconf->l_in_current_min;
+
+			// Keep old offsets if writing offsets is disabled
+			if (!(mcconf->foc_offsets_cal_mode & (1 << 1))) {
+				mcconf->foc_offsets_current[0] = mcconf_old->foc_offsets_current[0];
+				mcconf->foc_offsets_current[1] = mcconf_old->foc_offsets_current[1];
+				mcconf->foc_offsets_current[2] = mcconf_old->foc_offsets_current[2];
+
+				mcconf->foc_offsets_voltage[0] = mcconf_old->foc_offsets_voltage[0];
+				mcconf->foc_offsets_voltage[1] = mcconf_old->foc_offsets_voltage[1];
+				mcconf->foc_offsets_voltage[2] = mcconf_old->foc_offsets_voltage[2];
+
+				mcconf->foc_offsets_voltage_undriven[0] = mcconf_old->foc_offsets_voltage_undriven[0];
+				mcconf->foc_offsets_voltage_undriven[1] = mcconf_old->foc_offsets_voltage_undriven[1];
+				mcconf->foc_offsets_voltage_undriven[2] = mcconf_old->foc_offsets_voltage_undriven[2];
+			}
 
 			commands_apply_mcconf_hw_limits(mcconf);
 			conf_general_store_mc_configuration(mcconf, mc_interface_get_motor_thread() == 2);
@@ -1392,6 +1408,7 @@ void commands_process_packet(unsigned char *data, unsigned int len,
 #ifdef USE_LISPBM
 		if (packet_id == COMM_LISP_ERASE_CODE) {
 			lispif_restart(false, false, false);
+			flash_helper_erase_code(CODE_IND_LISP_CONST);
 		}
 #endif
 
@@ -1870,6 +1887,7 @@ void commands_apply_mcconf_hw_limits(mc_configuration *mcconf) {
 #ifdef HW_LIM_CURRENT
 	utils_truncate_number(&mcconf->l_current_max, HW_LIM_CURRENT);
 	utils_truncate_number(&mcconf->l_current_min, HW_LIM_CURRENT);
+	utils_truncate_number(&mcconf->foc_hfi_amb_current, HW_LIM_CURRENT);
 #endif
 #ifdef HW_LIM_CURRENT_IN
 	utils_truncate_number(&mcconf->l_in_current_max, HW_LIM_CURRENT_IN);

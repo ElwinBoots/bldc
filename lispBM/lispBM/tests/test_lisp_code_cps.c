@@ -58,13 +58,13 @@ static uint32_t timeout = 30;
 
 void const_heap_init(void) {
   for (int i = 0; i < CONSTANT_MEMORY_SIZE; i ++) {
-    constants_memory[i] = 0xFFFFFFFF;
+    constants_memory[i] = (lbm_uint)-1;
   }
 }
 
 bool const_heap_write(lbm_uint ix, lbm_uint w) {
   if (ix >= CONSTANT_MEMORY_SIZE) return false;
-  if (constants_memory[ix] != 0xFFFFFFFF) {
+  if (constants_memory[ix] != ((lbm_uint)-1)) {
     printf("Writing to same flash location more than once\n");
     return false;
   }
@@ -576,7 +576,7 @@ int main(int argc, char **argv) {
   lbm_array_extensions_init();
   lbm_math_extensions_init();
   lbm_string_extensions_init();
-  lbm_runtime_extensions_init(false);
+  lbm_runtime_extensions_init();
   lbm_matvec_extensions_init();
   lbm_random_extensions_init();
   lbm_loop_extensions_init();

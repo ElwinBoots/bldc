@@ -134,6 +134,12 @@ typedef enum {
 } mc_foc_observer_type;
 
 typedef enum {
+	FOC_AMB_MODE_SIX_VECTOR = 0,
+	FOC_AMB_MODE_D_SINGLE_PULSE,
+	FOC_AMB_MODE_D_DOUBLE_PULSE
+} mc_foc_hfi_amb_mode;
+
+typedef enum {
 	FAULT_CODE_NONE = 0,
 	FAULT_CODE_OVER_VOLTAGE,
 	FAULT_CODE_UNDER_VOLTAGE,
@@ -466,6 +472,9 @@ typedef struct {
 	float foc_current_filter_const;
 	mc_foc_cc_decoupling_mode foc_cc_decoupling;
 	mc_foc_observer_type foc_observer_type;
+	mc_foc_hfi_amb_mode foc_hfi_amb_mode;
+	float foc_hfi_amb_current;
+	uint8_t foc_hfi_amb_tres;
 	float foc_hfi_voltage_start;
 	float foc_hfi_voltage_run;
 	float foc_hfi_voltage_max;
@@ -476,7 +485,7 @@ typedef struct {
 	uint16_t foc_hfi_start_samples;
 	float foc_hfi_obs_ovr_sec;
 	foc_hfi_samples foc_hfi_samples;
-	bool foc_offsets_cal_on_boot;
+	uint8_t foc_offsets_cal_mode;
 	float foc_offsets_current[3];
 	float foc_offsets_voltage[3];
 	float foc_offsets_voltage_undriven[3];

@@ -57,15 +57,11 @@
 #include "shutdown.h"
 #include "app.h"
 #include "comm_usb.h"
+#include "flash_helper.h"
 
 #include <math.h>
 #include <ctype.h>
 #include <stdarg.h>
-
-/**
- * Bytes per word in the LBM memory.
- */
-#define LBM_WORD_SIZE 4
 
 typedef struct {
 	// BMS
@@ -151,6 +147,10 @@ typedef struct {
 	lbm_uint bms_vmax_limit_end;
 	lbm_uint motor_type;
 	lbm_uint foc_sensor_mode;
+	lbm_uint foc_hfi_amb_mode;
+	lbm_uint foc_hfi_amb_current;
+	lbm_uint foc_hfi_amb_tres;
+	lbm_uint foc_hfi_start_samples;
 	lbm_uint foc_current_kp;
 	lbm_uint foc_current_ki;
 	lbm_uint foc_f_zv;
@@ -180,7 +180,7 @@ typedef struct {
 	lbm_uint foc_sl_openloop_time;
 	lbm_uint foc_temp_comp;
 	lbm_uint foc_temp_comp_base_temp;
-	lbm_uint foc_offsets_cal_on_boot;
+	lbm_uint foc_offsets_cal_mode;
 	lbm_uint foc_fw_current_max;
 	lbm_uint foc_fw_duty_start;
 	lbm_uint foc_short_ls_on_zero_duty;
@@ -196,6 +196,7 @@ typedef struct {
 	lbm_uint min_speed;
 	lbm_uint max_speed;
 	lbm_uint controller_id;
+	lbm_uint timeout_msec;
 	lbm_uint can_baud_rate;
 	lbm_uint can_status_rate_1;
 	lbm_uint can_status_msgs_r1;
@@ -224,6 +225,7 @@ typedef struct {
 	lbm_uint has_phase_filters;
 	lbm_uint uuid;
 	lbm_uint runtime;
+	lbm_uint odometer;
 	lbm_uint git_branch;
 	lbm_uint git_hash;
 	lbm_uint compiler;
@@ -418,6 +420,14 @@ static bool compare_symbol(lbm_uint sym, lbm_uint *comp) {
 			lbm_add_symbol_const("motor-type", comp);
 		} else if (comp == &syms_vesc.foc_sensor_mode) {
 			lbm_add_symbol_const("foc-sensor-mode", comp);
+		} else if (comp == &syms_vesc.foc_hfi_amb_mode) {
+			lbm_add_symbol_const("foc-hfi-amb-mode", comp);
+		} else if (comp == &syms_vesc.foc_hfi_amb_current) {
+			lbm_add_symbol_const("foc-hfi-amb-current", comp);
+		} else if (comp == &syms_vesc.foc_hfi_amb_tres) {
+			lbm_add_symbol_const("foc-hfi-amb-tres", comp);
+		} else if (comp == &syms_vesc.foc_hfi_start_samples) {
+			lbm_add_symbol_const("foc-hfi-start-samples", comp);
 		} else if (comp == &syms_vesc.foc_current_kp) {
 			lbm_add_symbol_const("foc-current-kp", comp);
 		} else if (comp == &syms_vesc.foc_current_ki) {
@@ -476,8 +486,8 @@ static bool compare_symbol(lbm_uint sym, lbm_uint *comp) {
 			lbm_add_symbol_const("foc-temp-comp", comp);
 		} else if (comp == &syms_vesc.foc_temp_comp_base_temp) {
 			lbm_add_symbol_const("foc-temp-comp-base-temp", comp);
-		} else if (comp == &syms_vesc.foc_offsets_cal_on_boot) {
-			lbm_add_symbol_const("foc-offsets-cal-on-boot", comp);
+		} else if (comp == &syms_vesc.foc_offsets_cal_mode) {
+			lbm_add_symbol_const("foc-offsets-cal-mode", comp);
 		} else if (comp == &syms_vesc.foc_fw_current_max) {
 			lbm_add_symbol_const("foc-fw-current-max", comp);
 		} else if (comp == &syms_vesc.foc_fw_duty_start) {
@@ -508,6 +518,8 @@ static bool compare_symbol(lbm_uint sym, lbm_uint *comp) {
 			lbm_add_symbol_const("max-speed", comp);
 		} else if (comp == &syms_vesc.controller_id) {
 			lbm_add_symbol_const("controller-id", comp);
+		} else if (comp == &syms_vesc.timeout_msec) {
+			lbm_add_symbol_const("timeout-msec", comp);
 		} else if (comp == &syms_vesc.can_baud_rate) {
 			lbm_add_symbol_const("can-baud-rate", comp);
 		} else if (comp == &syms_vesc.can_status_rate_1) {
@@ -562,6 +574,8 @@ static bool compare_symbol(lbm_uint sym, lbm_uint *comp) {
 			lbm_add_symbol_const("uuid", comp);
 		} else if (comp == &syms_vesc.runtime) {
 			lbm_add_symbol_const("runtime", comp);
+		} else if (comp == &syms_vesc.odometer) {
+			lbm_add_symbol_const("odometer", comp);
 		} else if (comp == &syms_vesc.git_branch) {
 			lbm_add_symbol_const("git-branch", comp);
 		} else if (comp == &syms_vesc.git_hash) {
@@ -1113,7 +1127,7 @@ static lbm_value ext_get_imu_gyro_derot(lbm_value *args, lbm_uint argn) {
 
 static void send_app_data(unsigned char *data, unsigned int len, int interface, int can_id) {
 	int32_t index = 0;
-	uint8_t *send_buffer_global = mempools_get_packet_buffer();
+	uint8_t *send_buffer_global = mempools_get_lbm_packet_buffer();
 	send_buffer_global[index++] = COMM_CUSTOM_APP_DATA;
 	memcpy(send_buffer_global + index, data, len);
 	index += len;
@@ -1366,6 +1380,8 @@ static lbm_value ext_sysinfo(lbm_value *args, lbm_uint argn) {
 		res = lbm_cons(lbm_enc_i(STM32_UUID_8[0]), res);
 	} else if (compare_symbol(name, &syms_vesc.runtime)) {
 		res = lbm_enc_u64(g_backup.runtime);
+	} else if (compare_symbol(name, &syms_vesc.odometer)) {
+		res = lbm_enc_u64(g_backup.odometer);
 	} else if (compare_symbol(name, &syms_vesc.git_branch)) {
 		lbm_value lbm_res;
 		if (lbm_create_array(&lbm_res, strlen(GIT_BRANCH_NAME) + 1)) {
@@ -1398,6 +1414,12 @@ static lbm_value ext_sysinfo(lbm_value *args, lbm_uint argn) {
 	}
 
 	return res;
+}
+
+static lbm_value ext_set_odometer(lbm_value *args, lbm_uint argn) {
+	LBM_CHECK_ARGN_NUMBER(1);
+	mc_interface_set_odometer(lbm_dec_as_u64(args[0]));
+	return ENC_SYM_TRUE;
 }
 
 static lbm_value ext_stats(lbm_value *args, lbm_uint argn) {
@@ -1470,7 +1492,7 @@ static lbm_value ext_can_cmd(lbm_value *args, lbm_uint argn) {
 		return ENC_SYM_EERROR;
 	}
 
-	uint8_t *send_buf = mempools_get_packet_buffer();
+	uint8_t *send_buf = mempools_get_lbm_packet_buffer();
 	send_buf[0] = COMM_LISP_REPL_CMD;
 	memcpy(send_buf + 1, array->data, array->size);
 	comm_can_send_buffer(id, send_buf, array->size + 1, 2);
@@ -1893,6 +1915,17 @@ static lbm_value ext_foc_est_ind(lbm_value *args, lbm_uint argn) {
 	return lbm_enc_float(mcpwm_foc_get_est_ind());
 }
 
+static lbm_value ext_foc_hfi_res(lbm_value *args, lbm_uint argn) {
+	(void)args; (void)argn;
+	volatile const hfi_state_t *hfi = mcpwm_foc_get_hfi_state();
+	lbm_value hfi_data = ENC_SYM_NIL;
+	hfi_data = lbm_cons(lbm_enc_float(hfi->buffer[7]), hfi_data);
+	hfi_data = lbm_cons(lbm_enc_float(hfi->buffer[6]), hfi_data);
+	hfi_data = lbm_cons(lbm_enc_float(hfi->buffer[5]), hfi_data);
+
+	return hfi_data;
+}
+
 static lbm_value ext_get_duty(lbm_value *args, lbm_uint argn) {
 	(void)args; (void)argn;
 	return lbm_enc_float(mc_interface_get_duty_cycle_now());
@@ -1901,6 +1934,11 @@ static lbm_value ext_get_duty(lbm_value *args, lbm_uint argn) {
 static lbm_value ext_get_rpm(lbm_value *args, lbm_uint argn) {
 	(void)args; (void)argn;
 	return lbm_enc_float(mc_interface_get_rpm());
+}
+
+static lbm_value ext_get_rpm_set(lbm_value *args, lbm_uint argn) {
+	(void)args; (void)argn;
+	return lbm_enc_float(mcpwm_foc_get_pid_speed_set());
 }
 
 static lbm_value ext_get_rpm_fast(lbm_value *args, lbm_uint argn) {
@@ -1954,6 +1992,15 @@ static lbm_value ext_get_temp_mot(lbm_value *args, lbm_uint argn) {
 static lbm_value ext_get_speed(lbm_value *args, lbm_uint argn) {
 	(void)args; (void)argn;
 	return lbm_enc_float(mc_interface_get_speed());
+}
+
+static lbm_value ext_get_speed_set(lbm_value *args, lbm_uint argn) {
+	(void)args; (void)argn;
+
+	const volatile mc_configuration *conf = mc_interface_get_configuration();
+	const float rpm = mcpwm_foc_get_pid_speed_set() / (conf->si_motor_poles / 2.0);
+
+	return lbm_enc_float((rpm / 60.0) * conf->si_wheel_diameter * M_PI / conf->si_gear_ratio);
 }
 
 static lbm_value ext_get_dist(lbm_value *args, lbm_uint argn) {
@@ -3408,14 +3455,18 @@ static lbm_value ext_conf_set(lbm_value *args, lbm_uint argn) {
 	} else if (compare_symbol(name, &syms_vesc.si_battery_ah)) {
 		mcconf->si_battery_ah = lbm_dec_as_float(args[1]);
 		changed_mc = 1;
-	} else if (compare_symbol(name, &syms_vesc.foc_offsets_cal_on_boot)) {
-		mcconf->foc_offsets_cal_on_boot = lbm_dec_as_i32(args[1]);
+	} else if (compare_symbol(name, &syms_vesc.foc_offsets_cal_mode)) {
+		mcconf->foc_offsets_cal_mode = lbm_dec_as_i32(args[1]);
 		changed_mc = 1;
 	} else if (compare_symbol(name, &syms_vesc.foc_short_ls_on_zero_duty)) {
 		mcconf->foc_short_ls_on_zero_duty = lbm_dec_as_i32(args[1]);
 		changed_mc = 1;
 	} else if (compare_symbol(name, &syms_vesc.controller_id)) {
 		appconf->controller_id = lbm_dec_as_i32(args[1]);
+		changed_app = 1;
+	} else if (compare_symbol(name, &syms_vesc.timeout_msec)) {
+		appconf->timeout_msec = lbm_dec_as_i32(args[1]);
+		timeout_configure(appconf->timeout_msec, appconf->timeout_brake_current, appconf->kill_sw_mode);
 		changed_app = 1;
 	} else if (compare_symbol(name, &syms_vesc.can_status_rate_1)) {
 		appconf->can_status_rate_1 = lbm_dec_as_u32(args[1]);
@@ -3444,6 +3495,18 @@ static lbm_value ext_conf_set(lbm_value *args, lbm_uint argn) {
 			changed_mc = 2;
 		} else if (compare_symbol(name, &syms_vesc.foc_sensor_mode)) {
 			mcconf->foc_sensor_mode = lbm_dec_as_i32(args[1]);
+			changed_mc = 2;
+		} else if (compare_symbol(name, &syms_vesc.foc_hfi_amb_mode)) {
+			mcconf->foc_hfi_amb_mode = lbm_dec_as_i32(args[1]);
+			changed_mc = 2;
+		} else if (compare_symbol(name, &syms_vesc.foc_hfi_amb_current)) {
+			mcconf->foc_hfi_amb_current = lbm_dec_as_float(args[1]);
+			changed_mc = 2;
+		} else if (compare_symbol(name, &syms_vesc.foc_hfi_amb_tres)) {
+			mcconf->foc_hfi_amb_tres = lbm_dec_as_i32(args[1]);
+			changed_mc = 2;
+		} else if (compare_symbol(name, &syms_vesc.foc_hfi_start_samples)) {
+			mcconf->foc_hfi_start_samples = lbm_dec_as_i32(args[1]);
 			changed_mc = 2;
 		} else if (compare_symbol(name, &syms_vesc.foc_current_kp)) {
 			mcconf->foc_current_kp = lbm_dec_as_float(args[1]);
@@ -3767,6 +3830,14 @@ static lbm_value ext_conf_get(lbm_value *args, lbm_uint argn) {
 		res = lbm_enc_i(mcconf->motor_type);
 	} else if (compare_symbol(name, &syms_vesc.foc_sensor_mode)) {
 		res = lbm_enc_i(mcconf->foc_sensor_mode);
+	} else if (compare_symbol(name, &syms_vesc.foc_hfi_amb_mode)) {
+		res = lbm_enc_i(mcconf->foc_hfi_amb_mode);
+	} else if (compare_symbol(name, &syms_vesc.foc_hfi_amb_current)) {
+		res = lbm_enc_float(mcconf->foc_hfi_amb_current);
+	} else if (compare_symbol(name, &syms_vesc.foc_hfi_amb_tres)) {
+		res = lbm_enc_i(mcconf->foc_hfi_amb_tres );
+	} else if (compare_symbol(name, &syms_vesc.foc_hfi_start_samples)) {
+		res = lbm_enc_i(mcconf->foc_hfi_start_samples);
 	} else if (compare_symbol(name, &syms_vesc.foc_current_kp)) {
 		res = lbm_enc_float(mcconf->foc_current_kp);
 	} else if (compare_symbol(name, &syms_vesc.foc_current_ki)) {
@@ -3825,8 +3896,8 @@ static lbm_value ext_conf_get(lbm_value *args, lbm_uint argn) {
 		res = lbm_enc_i(mcconf->foc_temp_comp);
 	} else if (compare_symbol(name, &syms_vesc.foc_temp_comp_base_temp)) {
 		res = lbm_enc_float(mcconf->foc_temp_comp_base_temp);
-	} else if (compare_symbol(name, &syms_vesc.foc_offsets_cal_on_boot)) {
-		res = lbm_enc_i(mcconf->foc_offsets_cal_on_boot);
+	} else if (compare_symbol(name, &syms_vesc.foc_offsets_cal_mode)) {
+		res = lbm_enc_i(mcconf->foc_offsets_cal_mode);
 	} else if (compare_symbol(name, &syms_vesc.foc_fw_current_max)) {
 		res = lbm_enc_float(mcconf->foc_fw_current_max);
 	} else if (compare_symbol(name, &syms_vesc.foc_fw_duty_start)) {
@@ -3857,6 +3928,8 @@ static lbm_value ext_conf_get(lbm_value *args, lbm_uint argn) {
 		res = lbm_enc_float(mcconf->l_max_erpm / speed_fact);
 	} else if (compare_symbol(name, &syms_vesc.controller_id)) {
 		res = lbm_enc_i(appconf->controller_id);
+	} else if (compare_symbol(name, &syms_vesc.timeout_msec)) {
+		res = lbm_enc_i(appconf->timeout_msec);
 	} else if (compare_symbol(name, &syms_vesc.can_baud_rate)) {
 		res = lbm_enc_i(appconf->can_baud_rate);
 	} else if (compare_symbol(name, &syms_vesc.can_status_rate_1)) {
@@ -3925,6 +3998,8 @@ static lbm_value ext_conf_store(lbm_value *args, lbm_uint argn) {
 	*appconf = *app_get_configuration();
 	bool res_app = conf_general_store_app_configuration(appconf);
 	mempools_free_appconf(appconf);
+
+	conf_general_store_backup_data();
 
 	return lbm_enc_sym((res_mc && res_app) ? SYM_TRUE : SYM_NIL);
 }
@@ -4697,7 +4772,7 @@ static lbm_value log_send_fxx(bool is_64, lbm_value *args, lbm_uint argn) {
 	}
 
 	int32_t ind = 0;
-	uint8_t *buffer = mempools_get_packet_buffer();
+	uint8_t *buffer = mempools_get_lbm_packet_buffer();
 
 	buffer[ind++] = is_64 ? COMM_LOG_DATA_F64 : COMM_LOG_DATA_F32;
 	buffer_append_int16(buffer, field_start, &ind);
@@ -5136,6 +5211,18 @@ static lbm_value ext_shutdown_hold(lbm_value *args, lbm_uint argn) {
 	return ENC_SYM_TRUE;
 }
 
+static lbm_value ext_const_heap_erase(lbm_value *args, lbm_uint argn) {
+	(void)args; (void)argn;
+
+	if (lispif_const_heap_max_ind() > 0) {
+		lbm_set_error_reason("Const heap already in use");
+		return ENC_SYM_EERROR;
+	}
+
+	flash_helper_erase_code(CODE_IND_LISP_CONST);
+	return ENC_SYM_TRUE;
+}
+
 
 // Remote Messages
 
@@ -5191,7 +5278,7 @@ static lbm_value ext_canmsg_send(lbm_value *args, lbm_uint argn) {
 		return ENC_SYM_TERROR;
 	}
 
-	uint8_t *buf = mempools_get_packet_buffer();
+	uint8_t *buf = mempools_get_lbm_packet_buffer();
 	buf[0] = COMM_LISP_RMSG;
 	buf[1] = slot;
 	memcpy(buf + 2, array->data, array->size);
@@ -5319,6 +5406,7 @@ void lispif_load_vesc_extensions(void) {
 	lbm_add_extension("eeprom-store-i", ext_eeprom_store_i);
 	lbm_add_extension("eeprom-read-i", ext_eeprom_read_i);
 	lbm_add_extension("sysinfo", ext_sysinfo);
+	lbm_add_extension("set-odometer", ext_set_odometer);
 	lbm_add_extension("stats", ext_stats);
 	lbm_add_extension("stats-reset", ext_stats_reset);
 	lbm_add_extension("import", ext_empty);
@@ -5329,6 +5417,7 @@ void lispif_load_vesc_extensions(void) {
 	lbm_add_extension("crc32", ext_crc32);
 	lbm_add_extension("buf-resize", ext_buf_resize);
 	lbm_add_extension("shutdown-hold", ext_shutdown_hold);
+	lbm_add_extension("const-heap-erase", ext_const_heap_erase);
 
 	// APP commands
 	lbm_add_extension("app-adc-detach", ext_app_adc_detach);
@@ -5371,14 +5460,17 @@ void lispif_load_vesc_extensions(void) {
 	lbm_add_extension("get-est-lambda", ext_foc_est_lambda);
 	lbm_add_extension("get-est-res", ext_foc_est_res);
 	lbm_add_extension("get-est-ind", ext_foc_est_ind);
+	lbm_add_extension("get-hfi-res", ext_foc_hfi_res);
 	lbm_add_extension("get-duty", ext_get_duty);
 	lbm_add_extension("get-rpm", ext_get_rpm);
 	lbm_add_extension("get-rpm-fast", ext_get_rpm_fast);
 	lbm_add_extension("get-rpm-faster", ext_get_rpm_faster);
+	lbm_add_extension("get-rpm-set", ext_get_rpm_set);
 	lbm_add_extension("get-pos", ext_get_pos);
 	lbm_add_extension("get-temp-fet", ext_get_temp_fet);
 	lbm_add_extension("get-temp-mot", ext_get_temp_mot);
 	lbm_add_extension("get-speed", ext_get_speed);
+	lbm_add_extension("get-speed-set", ext_get_speed_set);
 	lbm_add_extension("get-dist", ext_get_dist);
 	lbm_add_extension("get-dist-abs", ext_get_dist_abs);
 	lbm_add_extension("get-batt", ext_get_batt);

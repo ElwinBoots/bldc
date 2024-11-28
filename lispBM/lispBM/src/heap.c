@@ -125,9 +125,9 @@ lbm_value lbm_enc_float(float x) {
 #endif
 }
 
+#ifndef LBM64
 static lbm_value enc_64_on_32(uint8_t *source, lbm_uint type_qual, lbm_uint type) {
-  lbm_value res = ENC_SYM_MERROR;
-  res = lbm_cons(ENC_SYM_NIL,ENC_SYM_NIL);
+  lbm_value res = lbm_cons(ENC_SYM_NIL,ENC_SYM_NIL);
   if (lbm_type_of(res) != LBM_TYPE_SYMBOL) {
     uint8_t* storage = lbm_malloc(sizeof(uint64_t));
     if (storage) {
@@ -140,6 +140,7 @@ static lbm_value enc_64_on_32(uint8_t *source, lbm_uint type_qual, lbm_uint type
   }
   return res;
 }
+#endif
 
 lbm_value lbm_enc_i64(int64_t x) {
 #ifndef LBM64
@@ -478,7 +479,7 @@ double lbm_dec_as_double(lbm_value a) {
   return r;
 }
 
- /****************************************************/
+/****************************************************/
 /* HEAP MANAGEMENT                                  */
 
 static int generate_freelist(size_t num_cells) {
@@ -552,20 +553,21 @@ int lbm_heap_init(lbm_cons_t *addr, lbm_uint num_cells,
   return generate_freelist(num_cells);
 }
 
+
 lbm_value lbm_heap_allocate_cell(lbm_type ptr_type, lbm_value car, lbm_value cdr) {
-  lbm_value res;
-  // it is a ptr replace freelist with cdr of freelist;
-  res = lbm_heap_state.freelist;
-  if (lbm_type_of(res) == LBM_TYPE_CONS) {
-    lbm_uint heap_ix = lbm_dec_ptr(res);
+  lbm_value r;
+  lbm_value cell = lbm_heap_state.freelist;
+  if (cell) {
+    lbm_uint heap_ix = lbm_dec_ptr(cell);
     lbm_heap_state.freelist = lbm_heap_state.heap[heap_ix].cdr;
     lbm_heap_state.num_alloc++;
     lbm_heap_state.heap[heap_ix].car = car;
     lbm_heap_state.heap[heap_ix].cdr = cdr;
-    res = lbm_set_ptr_type(res, ptr_type);
-    return res;
+    r = lbm_set_ptr_type(cell, ptr_type);
+  } else {
+    r = ENC_SYM_MERROR;
   }
-  return ENC_SYM_MERROR;
+  return r;
 }
 
 lbm_value lbm_heap_allocate_list(lbm_uint n) {
@@ -648,17 +650,35 @@ lbm_uint lbm_get_gc_stack_size(void) {
 }
 
 #ifdef USE_GC_PTR_REV
+/* ************************************************************
+   Deutch-Schorr-Waite (DSW) pointer reversal GC for 2-ptr cells
+   with a hack-solution for the lisp-array case (n-ptr cells).
+
+   DSW visits each branch node 3 times compared to 2 times for
+   the stack based recursive mark.
+   Where the stack based recursive mark performs a stack push/pop,
+   DSW rearranges the, current, prev, next and a ptr field on
+   the heap.
+
+   DSW changes the structure of the heap and it introduces an
+   invalid pointer (LBM_PTR_NULL) temporarily during marking.
+   Since the heap will be "messed up" while marking, a mutex
+   is introuded to keep other processes out of the heap while
+   marking.
+
+   TODO: See if the extra index field in arrays can be used
+   to mark arrays without resorting to recursive mark calls.
+*/
+
 static inline void value_assign(lbm_value *a, lbm_value b) {
   lbm_value a_old = *a & LBM_GC_MASK;
   *a = a_old | (b & ~LBM_GC_MASK);
 }
 
-void lbm_gc_mark_phase(lbm_value root) {
+void lbm_gc_mark_phase_nm(lbm_value root) {
   bool work_to_do = true;
-
   if (!lbm_is_ptr(root)) return;
 
-  mutex_lock(&lbm_const_heap_mutex);
   lbm_value curr = root;
   lbm_value prev = lbm_enc_cons_ptr(LBM_PTR_NULL);
 
@@ -677,6 +697,15 @@ void lbm_gc_mark_phase(lbm_value root) {
         value_assign(&cell->car, prev);
         value_assign(&prev,curr);
         value_assign(&curr, next);
+      } else if (lbm_type_of(curr) == LBM_TYPE_LISPARRAY) {
+        lbm_array_header_extended_t *arr = (lbm_array_header_extended_t*)cell->car;
+        lbm_value *arr_data = (lbm_value *)arr->data;
+        size_t  arr_size = (size_t)arr->size / sizeof(lbm_value);
+        // C stack recursion as deep as there are nested arrays.
+        // TODO: Try to do this without recursion on the C side.
+        for (size_t i = 0; i < arr_size; i ++) {
+          lbm_gc_mark_phase_nm(arr_data[i]);
+        }
       }
       // Will jump out next iteration as gc mark is set in curr.
     }
@@ -706,10 +735,31 @@ void lbm_gc_mark_phase(lbm_value root) {
       value_assign(&cell->cdr, next);
     }
   }
-  mutex_unlock(&lbm_const_heap_mutex);
+}
+
+void lbm_gc_mark_phase(lbm_value root) {
+    mutex_lock(&lbm_const_heap_mutex);
+    lbm_gc_mark_phase_nm(root);
+    mutex_unlock(&lbm_const_heap_mutex);
 }
 
 #else
+/* ************************************************************
+   Explicit stack "recursive" mark phase
+
+   Trees are marked in a left subtree before rigth subtree, car first then cdr,
+   way to favor lisp lists. This means that stack will grow slowly when
+   marking right-leaning (cdr-recursive) data-structures while left-leaning
+   (car-recursive) structures uses a lot of stack.
+
+   Lisp arrays contain an extra book-keeping field to keep track
+   of how far into the array the marking process has gone.
+
+   TODO: DSW should be used as a last-resort if the GC stack is exhausted.
+         If we use DSW as last-resort can we get away with a way smaller
+         GC stack and unchanged performance (on sensible programs)?
+*/
+
 extern eval_context_t *ctx_running;
 void lbm_gc_mark_phase(lbm_value root) {
   lbm_value t_ptr;
@@ -733,7 +783,7 @@ void lbm_gc_mark_phase(lbm_value root) {
       continue;
     }
 
-     t_ptr = lbm_type_of(curr);
+    t_ptr = lbm_type_of(curr);
 
     // An array is marked in O(N) time using an additional 32bit
     // value per array that keeps track of how far into the array GC
@@ -764,6 +814,16 @@ void lbm_gc_mark_phase(lbm_value root) {
       cell->cdr = lbm_set_gc_mark(cell->cdr);
       lbm_heap_state.gc_marked ++;
       lbm_pop(s, &curr); // Remove array from GC stack as we are done marking it.
+      continue;
+    } else if (t_ptr == LBM_TYPE_CHANNEL) {
+      cell->cdr = lbm_set_gc_mark(cell->cdr);
+      lbm_heap_state.gc_marked ++;
+      // TODO: Can channels be explicitly freed ?
+      if (cell->car != ENC_SYM_NIL) {
+        lbm_char_channel_t *chan = (lbm_char_channel_t *)cell->car;
+        curr = chan->dependency;
+        goto mark_shortcut;
+      }
       continue;
     }
 
@@ -840,33 +900,29 @@ int lbm_gc_sweep_phase(void) {
         case ENC_SYM_IND_F_TYPE:
           lbm_memory_free((lbm_uint*)heap[i].car);
           break;
-	case ENC_SYM_DEFRAG_ARRAY_TYPE:
-	  lbm_defrag_mem_free((lbm_uint*)heap[i].car);
-	  break;
+        case ENC_SYM_DEFRAG_ARRAY_TYPE:
+          lbm_defrag_mem_free((lbm_uint*)heap[i].car);
+          break;
         case ENC_SYM_LISPARRAY_TYPE: /* fall through */
         case ENC_SYM_ARRAY_TYPE:{
           lbm_array_header_t *arr = (lbm_array_header_t*)heap[i].car;
-          if (lbm_memory_ptr_inside((lbm_uint*)arr->data)) {
-            lbm_memory_free((lbm_uint *)arr->data);
-            lbm_heap_state.gc_recovered_arrays++;
-          }
+          lbm_memory_free((lbm_uint *)arr->data);
+          lbm_heap_state.gc_recovered_arrays++;
           lbm_memory_free((lbm_uint *)arr);
         } break;
         case ENC_SYM_CHANNEL_TYPE:{
           lbm_char_channel_t *chan = (lbm_char_channel_t*)heap[i].car;
-          if (lbm_memory_ptr_inside((lbm_uint*)chan)) {
-            lbm_memory_free((lbm_uint*)chan->state);
-            lbm_memory_free((lbm_uint*)chan);
-          }
+          lbm_memory_free((lbm_uint*)chan->state);
+          lbm_memory_free((lbm_uint*)chan);
         } break;
         case ENC_SYM_CUSTOM_TYPE: {
           lbm_uint *t = (lbm_uint*)heap[i].car;
           lbm_custom_type_destroy(t);
           lbm_memory_free(t);
           } break;
-	case ENC_SYM_DEFRAG_MEM_TYPE: {
-	  lbm_uint *ptr = (lbm_uint *)heap[i].car;
-	  lbm_defrag_mem_destroy(ptr);
+        case ENC_SYM_DEFRAG_MEM_TYPE: {
+          lbm_uint *ptr = (lbm_uint *)heap[i].car;
+          lbm_defrag_mem_destroy(ptr);
           } break;
         default:
           break;
@@ -916,11 +972,8 @@ lbm_value lbm_car(lbm_value c){
 // lbm_value.
 
 lbm_value lbm_caar(lbm_value c) {
-
-  lbm_value tmp;
-
   if (lbm_is_ptr(c)) {
-    tmp = lbm_ref_cell(c)->car;
+    lbm_value tmp = lbm_ref_cell(c)->car;
 
     if (lbm_is_ptr(tmp)) {
       return lbm_ref_cell(tmp)->car;
@@ -935,11 +988,8 @@ lbm_value lbm_caar(lbm_value c) {
 
 
 lbm_value lbm_cadr(lbm_value c) {
-
-  lbm_value tmp;
-
   if (lbm_is_ptr(c)) {
-    tmp = lbm_ref_cell(c)->cdr;
+    lbm_value tmp = lbm_ref_cell(c)->cdr;
 
     if (lbm_is_ptr(tmp)) {
       return lbm_ref_cell(tmp)->car;
@@ -1192,16 +1242,14 @@ int lbm_heap_allocate_array_base(lbm_value *res, bool byte_array, lbm_uint size)
   array->size = size;
 
   // allocating a cell for array's heap-presence
-  lbm_value cell  = lbm_heap_allocate_cell(type, (lbm_uint) array, tag);
-
-  *res = cell;
-
-  if (lbm_type_of(cell) == LBM_TYPE_SYMBOL) { // Out of heap memory
+  lbm_value cell = lbm_heap_allocate_cell(type, (lbm_uint) array, tag);
+  if (cell == ENC_SYM_MERROR) {
     lbm_memory_free((lbm_uint*)array->data);
     lbm_memory_free((lbm_uint*)array);
     *res = ENC_SYM_MERROR;
     return 0;
   }
+  *res = cell;
 
   lbm_heap_state.num_alloc_arrays ++;
 
@@ -1221,9 +1269,9 @@ int lbm_heap_allocate_lisp_array(lbm_value *res, lbm_uint size) {
 int lbm_lift_array(lbm_value *value, char *data, lbm_uint num_elt) {
 
   lbm_array_header_t *array = NULL;
-  lbm_value cell  = lbm_heap_allocate_cell(LBM_TYPE_CONS, ENC_SYM_NIL, ENC_SYM_ARRAY_TYPE);
+  lbm_value cell = lbm_heap_allocate_cell(LBM_TYPE_CONS, ENC_SYM_NIL, ENC_SYM_ARRAY_TYPE);
 
-  if (lbm_type_of(cell) == LBM_TYPE_SYMBOL) { // Out of heap memory
+  if (cell == ENC_SYM_MERROR) {
     *value = cell;
     return 0;
   }
@@ -1434,7 +1482,7 @@ lbm_flash_status lbm_const_write(lbm_uint *tgt, lbm_uint val) {
 
   if (lbm_const_heap_state) {
     lbm_uint flash = (lbm_uint)lbm_const_heap_state->heap;
-    lbm_uint ix = (((lbm_uint)tgt - flash) / 4); // byte address to ix
+    lbm_uint ix = (((lbm_uint)tgt - flash) / sizeof(lbm_uint)); // byte address to ix
     if (const_heap_write(ix, val)) {
       return LBM_FLASH_WRITE_OK;
     }

@@ -100,7 +100,7 @@ package_dict["STORMCORE_100S"] = [['stormcore_100s', default_name],
 package_dict["Little_FOCer"] = [['Little_FOCer', default_name]]
 package_dict["Little_FOCer_V3"] = [['Little_FOCer_V3', default_name]]
 package_dict["Little_FOCer_V3_1"] = [['Little_FOCer_V3_1', default_name]]
-package_dict["Little_FOCer_4"] = [['Little_FOCer_4', default_name]]
+package_dict["Little_FOCer_V4"] = [['Little_FOCer_V4', default_name]]
 package_dict["TRONIC_250R"] = [['TRONIC_250R', default_name]]
 package_dict["X12_PRO24"] = [['x12_pro24', default_name]]
 package_dict["X12_PRO30"] = [['x12_pro30', default_name]]
@@ -190,6 +190,8 @@ package_dict["VESC_BASIC"] = [['basic', default_name],
                     ['basic_no_limits', no_limits_name]]
 package_dict["VESC_BASIC_035"] = [['basic_035', default_name],
                     ['basic_035_no_limits', no_limits_name]]
+package_dict["VESC_BASIC_025"] = [['basic_025', default_name],
+                    ['basic_025_no_limits', no_limits_name]]
 package_dict["RSR_DD_V1"] = [['RSR_DD_V1', default_name],
                     ['RSR_DD_V1_005', 'RSR_DD_V1_005.bin']]
 package_dict["RSR_DD_V2"] = [['RSR_DD_V2', default_name]]

@@ -43,9 +43,7 @@ bool lbm_start_flatten(lbm_flat_value_t *v, size_t buffer_size) {
 }
 
 bool lbm_finish_flatten(lbm_flat_value_t *v) {
-
   lbm_uint size_words;
-
   if (v->buf_pos % sizeof(lbm_uint) == 0) {
     size_words = v->buf_pos / sizeof(lbm_uint);
   } else {
@@ -135,8 +133,10 @@ bool f_sym_string(lbm_flat_value_t *v, char *str) {
   bool res = false;
   if (str) {
     lbm_uint sym_bytes = strlen(str) + 1;
-    res = write_byte(v, S_SYM_STRING);
-    res = write_bytes(v, (uint8_t*)str, sym_bytes);
+    if (write_byte(v, S_SYM_STRING) &&
+	write_bytes(v, (uint8_t*)str, sym_bytes)) {
+      res = true;
+    }
   }
   return res;
 }
@@ -144,11 +144,10 @@ bool f_sym_string(lbm_flat_value_t *v, char *str) {
 // Potentially a difference between 32/64 bit version.
 // strlen returns size_t which is different on 32/64 bit platforms.
 int f_sym_string_bytes(lbm_value sym) {
-  char *sym_str;
   int res = FLATTEN_VALUE_ERROR_FATAL;
   if (lbm_is_symbol(sym)) {
     lbm_uint s = lbm_dec_sym(sym);
-    sym_str = (char*)lbm_get_name_by_symbol(s);
+    char *sym_str = (char*)lbm_get_name_by_symbol(s);
     if (sym_str) {
       lbm_uint sym_bytes = strlen(sym_str) + 1;
       res = (int)sym_bytes;
@@ -266,10 +265,9 @@ int flatten_value_size_internal(jmp_buf jb, lbm_value v, int depth) {
   switch (t) {
   case LBM_TYPE_CONS: {
     int res = 0;
-    int s2 = 0;
     int s1 = flatten_value_size_internal(jb,lbm_car(v), depth + 1);
     if (s1 > 0) {
-      s2 = flatten_value_size_internal(jb,lbm_cdr(v), depth + 1);
+      int s2 = flatten_value_size_internal(jb,lbm_cdr(v), depth + 1);
       if (s2 > 0) {
         res = (1 + s1 + s2);
       }
@@ -355,7 +353,7 @@ int flatten_value_c(lbm_flat_value_t *fv, lbm_value v) {
     lbm_value *arrdata = (lbm_value*)header->data;
     lbm_uint size = header->size / sizeof(lbm_value);
     if (!f_lisp_array(fv, size)) return FLATTEN_VALUE_ERROR_NOT_ENOUGH_MEMORY;
-    int fv_r;
+    int fv_r = FLATTEN_VALUE_OK;
     for (lbm_uint i = 0; i < size; i ++ ) {
       fv_r =  flatten_value_c(fv, arrdata[i]);
       if (fv_r != FLATTEN_VALUE_OK) {
@@ -452,8 +450,9 @@ lbm_value handle_flatten_error(int err_val) {
 lbm_value flatten_value(lbm_value v) {
 
   lbm_value array_cell = lbm_heap_allocate_cell(LBM_TYPE_CONS, ENC_SYM_NIL, ENC_SYM_ARRAY_TYPE);
-  if (lbm_type_of(array_cell) == LBM_TYPE_SYMBOL) {
-    return ENC_SYM_MERROR;
+
+  if (array_cell == ENC_SYM_MERROR) {
+    return array_cell;
   }
 
   lbm_flat_value_t fv;
@@ -750,17 +749,13 @@ static int lbm_unflatten_value_internal(lbm_flat_value_t *v, lbm_value *res) {
   }
   case S_SYM_STRING: {
     lbm_uint sym_id;
-    int r = lbm_get_symbol_by_name((char *)(v->buf + v->buf_pos), &sym_id);
-    if (!r) {
-      r = lbm_add_symbol_base((char *)(v->buf + v->buf_pos), &sym_id,false); //ram
-    }
-    if (r) {
+    if (lbm_add_symbol((char *)(v->buf + v->buf_pos), &sym_id)) {
       lbm_uint num_bytes = strlen((char*)(v->buf + v->buf_pos)) + 1;
       v->buf_pos += num_bytes;
       *res = lbm_enc_sym(sym_id);
       return UNFLATTEN_OK;
     }
-    return UNFLATTEN_MALFORMED;
+    return UNFLATTEN_GC_RETRY;
   }
   default:
     return UNFLATTEN_MALFORMED;
@@ -769,6 +764,9 @@ static int lbm_unflatten_value_internal(lbm_flat_value_t *v, lbm_value *res) {
 
 bool lbm_unflatten_value(lbm_flat_value_t *v, lbm_value *res) {
   bool b = false;
+#ifdef LBM_ALWAYS_GC
+  lbm_perform_gc();
+#endif
   int r = lbm_unflatten_value_internal(v,res);
   if (r == UNFLATTEN_GC_RETRY) {
     lbm_perform_gc();
