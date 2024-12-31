@@ -271,7 +271,10 @@ Get value from BMS. Examples:
 (get-bms-val 'bms-hum) ; Humidity
 (get-bms-val 'bms-pres) ; Pressure in PA (Added in 6.05)
 (get-bms-val 'bms-temp-cell-max) ; Maximum cell temperature
+(get-bms-val 'bms-v-cell-min) ; Minimum cell voltage (added in 6.06)
+(get-bms-val 'bms-v-cell-max) ; Maximum cell voltage (added in 6.06)
 (get-bms-val 'bms-soc) ; State of charge (0.0 to 1.0)
+(get-bms-val 'bms-soh) ; State of health (0.0 to 1.0)
 (get-bms-val 'bms-can-id) ; CAN ID of BMS
 (get-bms-val 'bms-ah-cnt-chg-total) ; Total ah charged
 (get-bms-val 'bms-wh-cnt-chg-total) ; Total wh charged
@@ -279,7 +282,20 @@ Get value from BMS. Examples:
 (get-bms-val 'bms-wh-cnt-dis-total) ; Total wh discharged
 (get-bms-val 'bms-msg-age) ; Age of last message from BMS in seconds
 (get-bms-val 'bms-chg-allowed) ; Charging allowed (Added in 6.05, Express only)
+(get-bms-val 'bms-data-version) ; Data version (added in 6.06)
 ```
+
+**Note**  
+In firmware 6.06 the following temperature sensor convention was introduced for bms-temps-adc. So when using (get-bms-val 'bms-temps-adc 2) the maximum cell temperature should be returned. If a temperature returns less than -280 degC that reading is not applicable on that BMS. Keep in mind that it will take some time before all BMSes follow this convention after the 6.06 release. (get-bms-val 'bms-data-version) should return 1 if this convention is used.
+
+| Sensor Index | Function |
+|---|---|
+| 0 | Balance IC |
+| 1 | Cell Min |
+| 2 | Cell Max |
+| 3 | Mosfet Switch |
+| 4 | Ambient Temperature |
+| 5+ | Optional sensors |
 
 ---
 
@@ -677,10 +693,11 @@ Read system info parameter param. Example:
 (sysinfo 'uuid) ; STM32 UUID. ESC only.
 (sysinfo 'runtime) ; Total runtime in seconds. ESC only.
 (sysinfo 'odometer) ; Total odometer in meters. ESC only. Added in 6.06.
-(sysinfo 'git-branch) ; Git branch name. ESC only.
-(sysinfo 'git-hash) ; Git hash of current commit. ESC only.
+(sysinfo 'git-branch) ; Git branch name.
+(sysinfo 'git-hash) ; Git hash of current commit.
 (sysinfo 'compiler) ; GCC version, e.g. 7.3.1. ESC only.
 (sysinfo 'hw-type) ; Hardware type, e.g. hw-express. Added in 6.02.
+(sysinfo 'part-running) ; Running partition name. Express only.
 ```
 
 ---
@@ -3894,7 +3911,7 @@ Get all overridden current limits from speed, temperature, voltage, wattage etc.
 
 ### EEPROM (Nonvolatile Storage)
 
-Up to 128 variables (int32 or float) can be stored in a nonvolatile memory reserved for LispBM. These variables persist between power cycles and configuration changes, but not between firmware updates. Keep in mind that the motor will be stopped briefly when writing them and that they only can be written a limited number of times (about 100 000 writes) before wear on the flash memory starts to become an issue.
+Up to 128 (256 in FW 6.06) variables (int32 or float) can be stored in a nonvolatile memory reserved for LispBM. These variables persist between power cycles and configuration changes, but not between firmware updates. Keep in mind that the motor will be stopped briefly when writing them and that they only can be written a limited number of times (about 100 000 writes) before wear on the flash memory starts to become an issue.
 
 ---
 
@@ -4650,6 +4667,24 @@ Replace every occurrence of rep in str with optWith. If optWith is omitted every
 > "Hello!"
 ```
 
+---
+
+### str-replicate
+| Platforms | Firmware |
+|---|---|
+| ESC, Express | 6.00+ |
+
+```clj
+(str-replicate n char)
+```
+
+Build a string by replicating char n times.
+
+Example:
+```clj
+(str-replicate 8 \#x)
+> "xxxxxxxx"
+```
 ---
 
 #### str-to-upper
@@ -6394,6 +6429,39 @@ Reboot and attempt to load the new firmware from the firmware-buffer using the b
 
 ---
 
+#### fw-info
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(fw-info optCanId)
+```
+
+Get an assoc-list containing information about the VESC version number and git commit hashes. If optCanId is `-1` or not given the local device is queried. If the target device does not run a recent enough firmware that supports this, or if the CAN bus is otherwise non-functional, this function will timeout after 2 seconds returning the symbol `timeout`.
+
+The returned assoc-list has the following structure:
+
+```
+(
+    ('version . (majorNumber minorNumber))
+    ('test-version . number)
+    ('commit . str)
+    ('user-commit . str-or-nil)
+)
+```
+
+The test versions exact semantics depend on which firmware is running on the queried device, but on bldc for instance it is the beta version number. The user commit hash can be configured when you are compiling any of the VESC firmwares yourself, and is useful when you have a separate project that is using any of the VESC firmwares as a dependency, you can then configure it to be the commit of said project. If it was not configured when building it is instead set to `nil`. Unfortunately there is currently no documentation written anywhere for how to set it, [but here are the relevant lines of code in bldc's makefile](../Makefile#L167-L172), and [here they are in vesc_express's CMake configuration](https://github.com/vedderb/vesc_express/blob/main/CMakeLists.txt#L32-L37). Similar [flags exist for vesc_bms_fw](https://github.com/vedderb/vesc_bms_fw/blob/main/Makefile#L32-L37) and [vesc_gpstm](https://github.com/vedderb/vesc_gpstm/blob/main/Makefile#L31-L36).
+
+Example where we queried a bldc unit with the CAN id 10 running a development build of v6.6 beta 3:
+```clj
+(fw-info 10)
+> ((version 6u 6u) (test-version . 3u) (commit . "4f2df650c4ed6d820657217e966d1dbd6c2c01e6") (user-commit . nil))
+```
+
+---
+
 #### fw-data
 
 | Platforms | Firmware |
@@ -6567,6 +6635,7 @@ Creates an LED-buffer for num-leds leds. The optional argument optLedType specif
 | 1 | RGB |
 | 2 | GRBW |
 | 3 | RGBW |
+| 4 | WRGB |
 
 The optional argument optGammaCorr can be set to enable gamma correction for this LED-buffer. Gamma correction makes the brightness non-linear matching the response of human eyes. Generally that makes colors look better and it is something that all monitors do. The downside is that fewer distinct colors are available as not all bits can be used.
 
@@ -7091,6 +7160,96 @@ Check if any client (e.g. VESC Tool) is connected over ble. Returns true when co
 ```
 
 Check if any client (e.g. VESC Tool) is connected over usb. Returns true when connected, nil otherwise.
+
+---
+
+## Non-Volatile Storage (NVS) on QML Partition
+
+The QML-partition on the ESP32 can be used to store non-volatile data as key-values. Note that QML-data cannot be stored as usual when using the QML-partition as NVS.
+
+---
+
+#### nvs-qml-erase
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(nvs-qml-erase)
+```
+
+Erase all data on QML-partition.
+
+---
+
+#### nvs-qml-init
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(nvs-qml-init)
+```
+
+Initialize the QML-partition with the NVS-module. This has to be done before further NVS-operations can be used. If needed, the QML-partition will be erased; this can happen if other data is stored on the QML-partition that is incompatible with the NVS-module.
+
+---
+
+#### nvs-qml-read
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(nvs-qml-read key)
+```
+
+Read key from QML-partition, return the content as a byte array. This can fail if key does not exist or if (nvs-qml-init) has not been run.
+
+---
+
+#### nvs-qml-write
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(nvs-qml-write key data)
+```
+
+Write data to key on QML-partition. If key already exists the old data will be replaced. This can fail if (nvs-qml-init) has not been run or if there is not enough space.
+
+---
+
+#### nvs-qml-erase-key
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(nvs-qml-erase-key key)
+```
+
+Erase single key from QML-partition. This can fail if key does not exist or if (nvs-qml-init) has not been run.
+
+---
+
+#### nvs-qml-list
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(nvs-qml-list)
+```
+
+Returns a list with all existing NVS keys. If (nvs-qml-init) has not been run this always returns nil.
 
 ---
 
