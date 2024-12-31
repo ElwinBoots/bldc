@@ -1949,6 +1949,17 @@ static void decode_msg(uint32_t eid, uint8_t *data8, int len, bool is_replaced) 
 					((uint32_t)CAN_PACKET_POLL_ROTOR_POS << 8), (uint8_t*)buffer, 4, true, 0);
 		} break;
 
+		case CAN_PACKET_TEST_ELWIN:
+			ind = 0;
+			if (len >= 6) {
+				mc_interface_set_current_off_delay(buffer_get_float16(data8, 1e3, &ind));
+			}
+
+			mc_interface_set_current(buffer_get_float32(data8, 1e3, &ind));
+
+			timeout_reset();
+			break;
+
 		default:
 			break;
 		}
