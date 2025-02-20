@@ -3652,22 +3652,20 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 
 	utils_norm_angle(&angle_now);
 
-	if (conf_now->p_pid_ang_div > 0.98 && conf_now->p_pid_ang_div < 1.02) {
-		motor_now->m_pos_pid_now = angle_now;
-	} else {
-		if (angle_now < 90.0 && motor_now->m_pid_div_angle_last > 270.0) {
-			motor_now->m_pid_div_angle_accumulator += 360.0 / conf_now->p_pid_ang_div;
-			utils_norm_angle((float*)&motor_now->m_pid_div_angle_accumulator);
-		} else if (angle_now > 270.0 && motor_now->m_pid_div_angle_last < 90.0) {
-			motor_now->m_pid_div_angle_accumulator -= 360.0 / conf_now->p_pid_ang_div;
-			utils_norm_angle((float*)&motor_now->m_pid_div_angle_accumulator);
-		}
 
-		motor_now->m_pid_div_angle_last = angle_now;
-
-		motor_now->m_pos_pid_now = motor_now->m_pid_div_angle_accumulator + angle_now / conf_now->p_pid_ang_div;
-		utils_norm_angle((float*)&motor_now->m_pos_pid_now);
+	if (angle_now < 90.0 && motor_now->m_pid_div_angle_last > 270.0) {
+		motor_now->m_pid_div_angle_accumulator += 360.0 ;
+	} else if (angle_now > 270.0 && motor_now->m_pid_div_angle_last < 90.0) {
+		motor_now->m_pid_div_angle_accumulator -= 360.0 ;
 	}
+	motor_now->m_pid_div_angle_last = angle_now;
+	if (conf_now->m_sensor_port_mode == SENSOR_PORT_MODE_HALL){
+		motor_now->m_pos_pid_now = (motor_now->m_pid_div_angle_accumulator + angle_now) * 2.0 / (float)conf_now->si_motor_poles ;
+	}
+	else{
+		motor_now->m_pos_pid_now = motor_now->m_pid_div_angle_accumulator + angle_now ;
+	}
+
 
 #ifdef AD2S1205_SAMPLE_GPIO
 	// Release sample in the AD2S1205 resolver IC.

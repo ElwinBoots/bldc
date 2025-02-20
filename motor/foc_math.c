@@ -380,41 +380,40 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	mc_configuration *conf_now = motor->m_conf;
 
 	float angle_now = motor->m_pos_pid_now;
-	float angle_set = motor->m_pos_pid_set;
+	//float angle_set = motor->m_pos_pid_set;
+
+	//First basic setpoint generator, just a ramp.
+	static float angle_set;
+	utils_step_towards((float*)&angle_set, motor->m_pos_pid_set, conf_now->s_pid_ramp_erpms_s * dt);
 
 	float p_term;
 	float d_term;
-	float d_term_proc;
 
 	// PID is off. Return.
 	if (motor->m_control_mode != CONTROL_MODE_POS) {
 		motor->m_pos_i_term = 0;
 		motor->m_pos_prev_error = 0;
-		motor->m_pos_prev_proc = angle_now;
 		motor->m_pos_d_filter = 0.0;
-		motor->m_pos_d_filter_proc = 0.0;
 		return;
 	}
 
 	// Compute parameters
-	float error = utils_angle_difference(angle_set, angle_now);
-	float error_sign = 1.0;
+	float error = angle_set - angle_now;
 
+	//TODO; improve. error should not be sign swapped.
 	if (conf_now->m_sensor_port_mode != SENSOR_PORT_MODE_HALL) {
 		if (conf_now->foc_encoder_inverted) {
-			error_sign = -1.0;
+			error *= -1.0;
 		}
 	}
-
-	error *= error_sign;
 
 	float kp = conf_now->p_pid_kp;
 	float ki = conf_now->p_pid_ki;
 	float kd = conf_now->p_pid_kd;
-	float kd_proc = conf_now->p_pid_kd_proc;
+//	float kd_proc = conf_now->p_pid_kd_proc;
 
-	if (conf_now->p_pid_gain_dec_angle > 0.1) {
-		float min_error = conf_now->p_pid_gain_dec_angle / conf_now->p_pid_ang_div;
+	if (conf_now->p_pid_gain_dec_angle > 0.1 && motor->m_pos_pid_set == angle_set) {
+		float min_error = conf_now->p_pid_gain_dec_angle;
 		float error_abs = fabs(error);
 
 		if (error_abs < min_error) {
@@ -422,64 +421,42 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 			kp *= scale;
 			ki *= scale;
 			kd *= scale;
-			kd_proc *= scale;
+//			kd_proc *= scale;
 		}
 	}
 
 	p_term = error * kp;
+	utils_truncate_number_abs(&p_term, conf_now->l_current_max);
+
 	motor->m_pos_i_term += error * (ki * dt);
 
-	// Average DT for the D term when the error does not change. This likely
-	// happens at low speed when the position resolution is low and several
-	// control iterations run without position updates.
-	// TODO: Are there problems with this approach?
-	motor->m_pos_dt_int += dt;
-	if (error == motor->m_pos_prev_error) {
-		d_term = 0.0;
-	} else {
-		d_term = (error - motor->m_pos_prev_error) * (kd / motor->m_pos_dt_int);
-		motor->m_pos_dt_int = 0.0;
-	}
-
-	// Filter D
-	UTILS_LP_FAST(motor->m_pos_d_filter, d_term, conf_now->p_pid_kd_filter);
-	d_term = motor->m_pos_d_filter;
-
-	// Process D term
-	motor->m_pos_dt_int_proc += dt;
-	if (angle_now == motor->m_pos_prev_proc) {
-		d_term_proc = 0.0;
-	} else {
-		d_term_proc = -utils_angle_difference(angle_now, motor->m_pos_prev_proc) * error_sign * (kd_proc / motor->m_pos_dt_int_proc);
-		motor->m_pos_dt_int_proc = 0.0;
-	}
-
-	// Filter D process
-	UTILS_LP_FAST(motor->m_pos_d_filter_proc, d_term_proc, conf_now->p_pid_kd_filter);
-	d_term_proc = motor->m_pos_d_filter_proc;
+	d_term = (error - motor->m_pos_prev_error) * (kd / dt);
 
 	// I-term wind-up protection
-	float p_tmp = p_term;
-	utils_truncate_number_abs(&p_tmp, 1.0);
-	utils_truncate_number_abs((float*)&motor->m_pos_i_term, 1.0 - fabsf(p_tmp));
+	utils_truncate_number_abs((float*)&motor->m_pos_i_term, conf_now->l_current_max - fabsf(p_term));
 
 	// Store previous error
 	motor->m_pos_prev_error = error;
-	motor->m_pos_prev_proc = angle_now;
 
 	// Calculate output
-	float output = p_term + motor->m_pos_i_term + d_term + d_term_proc;
-	utils_truncate_number(&output, -1.0, 1.0);
+	float output = p_term + motor->m_pos_i_term + d_term;
+	// Filter everything
+	UTILS_LP_FAST(motor->m_pos_d_filter, output, conf_now->p_pid_kd_filter);
+	output = motor->m_pos_d_filter;
+
+	utils_truncate_number(&output, -conf_now->l_current_max, conf_now->l_current_max);
 
 	if (conf_now->m_sensor_port_mode != SENSOR_PORT_MODE_HALL) {
 		if (index_found) {
-			motor->m_iq_set = output * conf_now->l_current_max * conf_now->l_current_max_scale;;
+//			motor->m_iq_set = output * conf_now->l_current_max * conf_now->l_current_max_scale;
+			motor->m_iq_set = output; // Output is current in [A]
 		} else {
 			// Rotate the motor with 40 % power until the encoder index is found.
 			motor->m_iq_set = 0.4 * conf_now->l_current_max * conf_now->l_current_max_scale;;
 		}
 	} else {
-		motor->m_iq_set = output * conf_now->l_current_max * conf_now->l_current_max_scale;;
+//		motor->m_iq_set = output * conf_now->l_current_max * conf_now->l_current_max_scale;;
+		motor->m_iq_set = output; // Output is current in [A]
 	}
 }
 

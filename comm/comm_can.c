@@ -1949,16 +1949,43 @@ static void decode_msg(uint32_t eid, uint8_t *data8, int len, bool is_replaced) 
 					((uint32_t)CAN_PACKET_POLL_ROTOR_POS << 8), (uint8_t*)buffer, 4, true, 0);
 		} break;
 
-		case CAN_PACKET_TEST_ELWIN:
-			ind = 0;
-			if (len >= 6) {
-				mc_interface_set_current_off_delay(buffer_get_float16(data8, 1e3, &ind));
-			}
-
-			mc_interface_set_current(buffer_get_float32(data8, 1e3, &ind));
-
+		case CAN_PACKET_TEST_ELWIN: {
+			mc_interface_set_pid_pos( *(float*)data8 ); //This works with data = struct.pack("<f", pos )
+			//mc_interface_set_pid_pos(buffer_get_float32_auto(data8, &ind)); //This works with data = struct.pack(">f", pos )
 			timeout_reset();
-			break;
+		}	break;
+
+		case CAN_PACKET_SET_POS_KP: {
+			mc_configuration *mcconf = mempools_alloc_mcconf();
+			*mcconf = *mc_interface_get_configuration();
+			mcconf->p_pid_kp = *(float*)data8;
+			mc_interface_set_configuration(mcconf);
+			mempools_free_mcconf(mcconf);
+		}	break;
+
+		case CAN_PACKET_SET_POS_KI: {
+			mc_configuration *mcconf = mempools_alloc_mcconf();
+			*mcconf = *mc_interface_get_configuration();
+			mcconf->p_pid_ki = *(float*)data8;
+			mc_interface_set_configuration(mcconf);
+			mempools_free_mcconf(mcconf);
+		}	break;
+
+		case CAN_PACKET_SET_POS_KD: {
+			mc_configuration *mcconf = mempools_alloc_mcconf();
+			*mcconf = *mc_interface_get_configuration();
+			mcconf->p_pid_kd = *(float*)data8;
+			mc_interface_set_configuration(mcconf);
+			mempools_free_mcconf(mcconf);
+		}	break;
+
+		case CAN_PACKET_SET_POS_FILTER: {
+			mc_configuration *mcconf = mempools_alloc_mcconf();
+			*mcconf = *mc_interface_get_configuration();
+			mcconf->p_pid_kd_filter = *(float*)data8;
+			mc_interface_set_configuration(mcconf);
+			mempools_free_mcconf(mcconf);
+		}	break;
 
 		default:
 			break;

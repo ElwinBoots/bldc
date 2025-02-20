@@ -97,9 +97,9 @@ typedef struct {
 } motor_if_state_t;
 
 // Private variables
-static volatile motor_if_state_t m_motor_1;
+static volatile motor_if_state_t m_motor_if_1;
 #ifdef HW_HAS_DUAL_MOTORS
-static volatile motor_if_state_t m_motor_2;
+static volatile motor_if_state_t m_motor_if_2;
 #endif
 
 // Sampling variables
@@ -162,19 +162,19 @@ static THD_WORKING_AREA(stat_thread_wa, 512);
 static THD_FUNCTION(stat_thread, arg);
 
 void mc_interface_init(void) {
-	memset((void*)&m_motor_1, 0, sizeof(motor_if_state_t));
+	memset((void*)&m_motor_if_1, 0, sizeof(motor_if_state_t));
 #ifdef HW_HAS_DUAL_MOTORS
-	memset((void*)&m_motor_2, 0, sizeof(motor_if_state_t));
+	memset((void*)&m_motor_if_2, 0, sizeof(motor_if_state_t));
 #endif
 
-	conf_general_read_mc_configuration((mc_configuration*)&m_motor_1.m_conf, false);
+	conf_general_read_mc_configuration((mc_configuration*)&m_motor_if_1.m_conf, false);
 #ifdef HW_HAS_DUAL_MOTORS
-	conf_general_read_mc_configuration((mc_configuration*)&m_motor_2.m_conf, true);
+	conf_general_read_mc_configuration((mc_configuration*)&m_motor_if_2.m_conf, true);
 #endif
 
 #ifdef HW_HAS_DUAL_MOTORS
-	m_motor_1.m_conf.motor_type = MOTOR_TYPE_FOC;
-	m_motor_2.m_conf.motor_type = MOTOR_TYPE_FOC;
+	m_motor_if_1.m_conf.motor_type = MOTOR_TYPE_FOC;
+	m_motor_if_2.m_conf.motor_type = MOTOR_TYPE_FOC;
 #endif
 
 	m_last_adc_duration_sample = 0.0;
@@ -237,9 +237,9 @@ void mc_interface_init(void) {
 
 	case MOTOR_TYPE_FOC:
 #ifdef HW_HAS_DUAL_MOTORS
-		mcpwm_foc_init((mc_configuration*)&m_motor_1.m_conf, (mc_configuration*)&m_motor_2.m_conf);
+		mcpwm_foc_init((mc_configuration*)&m_motor_if_1.m_conf, (mc_configuration*)&m_motor_if_2.m_conf);
 #else
-		mcpwm_foc_init((mc_configuration*)&m_motor_1.m_conf, (mc_configuration*)&m_motor_1.m_conf);
+		mcpwm_foc_init((mc_configuration*)&m_motor_if_1.m_conf, (mc_configuration*)&m_motor_if_1.m_conf);
 #endif
 		break;
 
@@ -247,7 +247,7 @@ void mc_interface_init(void) {
 		break;
 	}
 
-	bms_init((bms_config*)&m_motor_1.m_conf.bms);
+	bms_init((bms_config*)&m_motor_if_1.m_conf.bms);
 }
 
 int mc_interface_motor_now(void) {
@@ -371,9 +371,9 @@ void mc_interface_set_configuration(mc_configuration *configuration) {
 
 		case MOTOR_TYPE_FOC:
 #ifdef HW_HAS_DUAL_MOTORS
-			mcpwm_foc_init((mc_configuration*)&m_motor_1.m_conf, (mc_configuration*)&m_motor_2.m_conf);
+			mcpwm_foc_init((mc_configuration*)&m_motor_if_1.m_conf, (mc_configuration*)&m_motor_if_2.m_conf);
 #else
-			mcpwm_foc_init((mc_configuration*)&m_motor_1.m_conf, (mc_configuration*)&m_motor_1.m_conf);
+			mcpwm_foc_init((mc_configuration*)&m_motor_if_1.m_conf, (mc_configuration*)&m_motor_if_1.m_conf);
 #endif
 			break;
 
@@ -394,12 +394,12 @@ void mc_interface_set_configuration(mc_configuration *configuration) {
 
 	case MOTOR_TYPE_FOC:
 #ifdef HW_HAS_DUAL_MOTORS
-		if (motor == &m_motor_1) {
-			m_motor_2.m_conf.foc_f_zv = motor->m_conf.foc_f_zv;
-			m_motor_2.m_conf.motor_type = motor->m_conf.motor_type;
+		if (motor == &m_motor_if_1) {
+			m_motor_if_2.m_conf.foc_f_zv = motor->m_conf.foc_f_zv;
+			m_motor_if_2.m_conf.motor_type = motor->m_conf.motor_type;
 		} else {
-			m_motor_1.m_conf.foc_f_zv = motor->m_conf.foc_f_zv;
-			m_motor_1.m_conf.motor_type = motor->m_conf.motor_type;
+			m_motor_if_1.m_conf.foc_f_zv = motor->m_conf.foc_f_zv;
+			m_motor_if_1.m_conf.motor_type = motor->m_conf.motor_type;
 		}
 #endif
 		mcpwm_foc_set_configuration((mc_configuration*)&motor->m_conf);
@@ -635,7 +635,7 @@ void mc_interface_set_pid_pos(float pos) {
 		}
 	}
 
-	utils_norm_angle(&pos);
+	//utils_norm_angle(&pos);
 
 	switch (conf->motor_type) {
 	case MOTOR_TYPE_BLDC:
@@ -1506,7 +1506,7 @@ void mc_interface_sample_print_data(debug_sampling_mode mode, uint16_t len, uint
 		m_sample_mode = mode;
 		m_sample_raw = raw;
 #ifdef HW_HAS_DUAL_MOTORS
-		m_sample_is_second_motor = motor_now() == &m_motor_2;
+		m_sample_is_second_motor = motor_now() == &m_motor_if_2;
 #endif
 	}
 }
@@ -1710,10 +1710,10 @@ void mc_interface_ignore_input(int time_ms) {
  * Ignore motor control commands for this amount of time on both motors.
  */
 void mc_interface_ignore_input_both(int time_ms) {
-	m_motor_1.m_ignore_iterations = time_ms;
+	m_motor_if_1.m_ignore_iterations = time_ms;
 
 #ifdef HW_HAS_DUAL_MOTORS
-	m_motor_2.m_ignore_iterations = time_ms;
+	m_motor_if_2.m_ignore_iterations = time_ms;
 #endif
 }
 
@@ -1847,9 +1847,9 @@ void mc_interface_mc_timer_isr(bool is_second_motor) {
 	ledpwm_update_pwm();
 
 #ifdef HW_HAS_DUAL_MOTORS
-	motor_if_state_t *motor = is_second_motor ? (motor_if_state_t*)&m_motor_2 : (motor_if_state_t*)&m_motor_1;
+	motor_if_state_t *motor = is_second_motor ? (motor_if_state_t*)&m_motor_if_2 : (motor_if_state_t*)&m_motor_if_1;
 #else
-	motor_if_state_t *motor = (motor_if_state_t*)&m_motor_1;
+	motor_if_state_t *motor = (motor_if_state_t*)&m_motor_if_1;
 	(void)is_second_motor;
 #endif
 
@@ -2187,7 +2187,7 @@ void mc_interface_mc_timer_isr(bool is_second_motor) {
 }
 
 void mc_interface_adc_inj_int_handler(void) {
-	switch (m_motor_1.m_conf.motor_type) {
+	switch (m_motor_if_1.m_conf.motor_type) {
 	case MOTOR_TYPE_BLDC:
 	case MOTOR_TYPE_DC:
 		mcpwm_adc_inj_int_handler();
@@ -2208,7 +2208,7 @@ void mc_interface_adc_inj_int_handler(void) {
  * The configaration to update.
  */
 static void update_override_limits(volatile motor_if_state_t *motor, volatile mc_configuration *conf) {
-	bool is_motor_1 = motor == &m_motor_1;
+	bool is_motor_1 = motor == &m_motor_if_1;
 
 	const float v_in = motor->m_input_voltage_filtered;
 	float rpm_now = 0.0;
@@ -2498,14 +2498,14 @@ static void update_override_limits(volatile motor_if_state_t *motor, volatile mc
 
 static volatile motor_if_state_t *motor_now(void) {
 #ifdef HW_HAS_DUAL_MOTORS
-	return mc_interface_motor_now() == 1 ? &m_motor_1 : &m_motor_2;
+	return mc_interface_motor_now() == 1 ? &m_motor_if_1 : &m_motor_if_2;
 #else
-	return &m_motor_1;
+	return &m_motor_if_1;
 #endif
 }
 
 static void run_timer_tasks(volatile motor_if_state_t *motor) {
-	bool is_motor_1 = motor == &m_motor_1;
+	bool is_motor_1 = motor == &m_motor_if_1;
 	mc_interface_select_motor_thread(is_motor_1 ? 1 : 2);
 
 	float voltage_fc = powf(2.0, -(float)motor->m_conf.m_batt_filter_const * 0.25);
@@ -2518,18 +2518,18 @@ static void run_timer_tasks(volatile motor_if_state_t *motor) {
 	// Update backup data (for motor 1 only)
 	if (is_motor_1) {
 		uint64_t odometer = mc_interface_get_distance_abs();
-		g_backup.odometer += odometer - m_motor_1.m_odometer_last;
-		m_motor_1.m_odometer_last = odometer;
+		g_backup.odometer += odometer - m_motor_if_1.m_odometer_last;
+		m_motor_if_1.m_odometer_last = odometer;
 
 		uint64_t runtime = chVTGetSystemTimeX() / CH_CFG_ST_FREQUENCY;
 
 		// Handle wrap around
-		if (runtime < m_motor_1.m_runtime_last) {
-			m_motor_1.m_runtime_last = 0;
+		if (runtime < m_motor_if_1.m_runtime_last) {
+			m_motor_if_1.m_runtime_last = 0;
 		}
 
-		g_backup.runtime += runtime - m_motor_1.m_runtime_last;
-		m_motor_1.m_runtime_last = runtime;
+		g_backup.runtime += runtime - m_motor_if_1.m_runtime_last;
+		m_motor_if_1.m_runtime_last = runtime;
 	}
 
 	motor->m_f_samp_now = mc_interface_get_sampling_frequency_now();
@@ -2635,7 +2635,7 @@ static void run_timer_tasks(volatile motor_if_state_t *motor) {
 		float curr2_offset;
 
 #ifdef HW_HAS_DUAL_MOTORS
-		mcpwm_foc_get_current_offsets(&curr0_offset, &curr1_offset, &curr2_offset, motor == &m_motor_2);
+		mcpwm_foc_get_current_offsets(&curr0_offset, &curr1_offset, &curr2_offset, motor == &m_motor_if_2);
 #else
 		mcpwm_foc_get_current_offsets(&curr0_offset, &curr1_offset, &curr2_offset, false);
 #endif
@@ -2687,9 +2687,9 @@ static THD_FUNCTION(timer_thread, arg) {
 	chRegSetThreadName("mcif timer");
 
 	for(;;) {
-		run_timer_tasks(&m_motor_1);
+		run_timer_tasks(&m_motor_if_1);
 #ifdef HW_HAS_DUAL_MOTORS
-		run_timer_tasks(&m_motor_2);
+		run_timer_tasks(&m_motor_if_2);
 #endif
 
 		chThdSleepMilliseconds(1);
@@ -2697,7 +2697,7 @@ static THD_FUNCTION(timer_thread, arg) {
 }
 
 static void update_stats(volatile motor_if_state_t *motor) {
-	mc_interface_select_motor_thread(motor == (&m_motor_1) ? 1 : 2);
+	mc_interface_select_motor_thread(motor == (&m_motor_if_1) ? 1 : 2);
 
 	setup_values val = mc_interface_get_setup_values();
 
@@ -2802,9 +2802,9 @@ static THD_FUNCTION(stat_thread, arg) {
 	chRegSetThreadName("StatCounter");
 
 	for(;;) {
-		update_stats(&m_motor_1);
+		update_stats(&m_motor_if_1);
 #ifdef HW_HAS_DUAL_MOTORS
-		update_stats(&m_motor_2);
+		update_stats(&m_motor_if_2);
 #endif
 
 		chThdSleepMilliseconds(10);
@@ -2906,9 +2906,9 @@ static THD_FUNCTION(fault_stop_thread, arg) {
 		fault_data_local fault_data_copy = m_fault_data;
 
 #ifdef HW_HAS_DUAL_MOTORS
-		volatile motor_if_state_t *motor = fault_data_copy.is_second_motor ? &m_motor_2 : &m_motor_1;
+		volatile motor_if_state_t *motor = fault_data_copy.is_second_motor ? &m_motor_if_2 : &m_motor_if_1;
 #else
-		volatile motor_if_state_t *motor = &m_motor_1;
+		volatile motor_if_state_t *motor = &m_motor_if_1;
 #endif
 
 		mc_interface_select_motor_thread(fault_data_copy.is_second_motor ? 2 : 1);
@@ -3008,12 +3008,12 @@ unsigned mc_interface_calc_crc(mc_configuration* conf_in, bool is_motor_2) {
 	if (conf == NULL) {
 		if(is_motor_2) {
 #ifdef HW_HAS_DUAL_MOTORS
-			conf = &(m_motor_2.m_conf);
+			conf = &(m_motor_if_2.m_conf);
 #else
 			return 0; //shouldn't be here
 #endif
 		} else {
-			conf = &(m_motor_1.m_conf);
+			conf = &(m_motor_if_1.m_conf);
 		}
 	}
 
