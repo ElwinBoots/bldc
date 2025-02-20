@@ -139,6 +139,20 @@ dev-1| a clear origin!
 
 ---
 
+#### set-fw-name
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(set-fw-name str)
+```
+
+Set (or override if already set in the firmware) firmware name. The firmware name is printed in the CAN-list in VESC Tool when it is set. It can also be used by packages to determine if they are compatible with the connected hardware.
+
+---
+
 #### timeout-reset
 
 | Platforms | Firmware |
@@ -375,6 +389,36 @@ Start or stop balancing. 1 means start and 0 means stop.
 ```
 
 Zero current measurement offset on BMS. Has to be done while no current (or charge-current on charge-only BMS) is flowing. Will be sent to every BMS on the CAN-bus.
+
+---
+
+#### bms-st
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(bms-st can-id)
+```
+
+Run self-test on BMS with can-id. Returns the following list on success, otherwise timeout:
+
+```clj
+(
+    1 ; Balance IC OK
+    1 ; Balamce connection check OK
+    8 ; Cell num (8 Cells)
+    (1 3.691400f32 3.561700f32) ; Cell 1 OK, V_BAL, V_NO_BAL
+    (1 3.687200f32 3.367500f32) ; Cell 2 OK, V_BAL, V_NO_BAL
+    (1 3.687500f32 3.377500f32) ; Cell 3 OK, V_BAL, V_NO_BAL
+    (1 3.688900f32 3.389400f32) ; Cell 4 OK, V_BAL, V_NO_BAL
+    (1 3.690100f32 3.401900f32) ; Cell 5 OK, V_BAL, V_NO_BAL
+    (1 3.688800f32 3.413800f32) ; Cell 6 OK, V_BAL, V_NO_BAL
+    (1 3.689000f32 3.424600f32) ; Cell 7 OK, V_BAL, V_NO_BAL
+    (1 3.688900f32 3.433300f32) ; Cell 8 OK, V_BAL, V_NO_BAL
+)
+```
 
 ---
 
@@ -2241,6 +2285,28 @@ Actively scan the CAN-bus and return a list with devices that responded. This fu
 
 ---
 
+#### can-ping
+
+| Platforms | Firmware |
+|---|---|
+| ESC, Express | 6.06+ |
+
+```clj
+(can-ping id)
+```
+
+Ping can-device with id. Valid IDs are 0 to 253. If the device responds 0, 1 or 2 is returned, meaning
+
+| Response | HW Type |
+|---|---|
+| 0 | ESC |
+| 1 | Old BMS |
+| 2 | Custom (e.g. Express or new BMS) |
+
+If the device does not respond nil is returned.
+
+---
+
 #### can-local-id
 
 | Platforms | Firmware |
@@ -2252,6 +2318,25 @@ Actively scan the CAN-bus and return a list with devices that responded. This fu
 ```
 
 Get local CAN ID.
+
+---
+
+#### can-update-baud
+
+| Platforms | Firmware |
+|---|---|
+| ESC, Express | 6.06+ |
+
+```clj
+(can-update-baud kbits)
+```
+
+Update CAN baudrate locally and on connected CAN-devices. kbits is the new baudrate. Note that this is only supported when all CAN-devices have firmware 6.06 or later. If the update fails the CAN-bus can become unusable until the settings are restored manually on each device. Valid baudrates in kbits are 125, 250, 500, 1000, 10, 20, 50, 75 and 100. Example:
+
+```clj
+(can-update-baud 1000) ; Update baudrate to 1 MBit/s
+(can-update-baud 250) ; Update baudrate to 250 KBit/s
+```
 
 ---
 
@@ -5467,6 +5552,79 @@ Change the stack size for the garbage collector. If the GC stack is too small th
 
 ---
 
+## Mutexes
+
+Mutexes can be used to lock resources from other contexts. Example:
+
+
+```clj
+(def mtx (mutex-create))
+
+(defun print-numbers() {
+        (mutex-lock mtx)
+        (print 1)
+        (sleep 0.5)
+        (print 2)
+        (sleep 0.5)
+        (print 3)
+        (sleep 0.5)
+        (print 4)
+        (mutex-unlock mtx)
+})
+
+(spawn 100 print-numbers)
+(sleep 0.1)
+(spawn 100 print-numbers)
+(sleep 0.1)
+(spawn 100 print-numbers)
+(sleep 0.1)
+(spawn 100 print-numbers)
+```
+
+---
+
+#### mutex-create
+
+| Platforms | Firmware |
+|---|---|
+| ESC, Express | 6.06+ |
+
+```clj
+(mutex-create)
+```
+
+Creates a mutex object. The mutex object is a dotted pair (ls . last) which contains two references into a single list, implementing a O(1)-insert-last O(1)-remove-first queue. At the surface though, it is a regular lisp dotted pair that can be destroyed with standard lisp functionality, no protection!
+
+---
+
+#### mutex-lock
+
+| Platforms | Firmware |
+|---|---|
+| ESC, Express | 6.06+ |
+
+```clj
+(mutex-lock mtx)
+```
+
+Lock mutex mtx. If mtx already is locked the current context will sleep until it is unlocked.
+
+---
+
+#### mutex-unlock
+
+| Platforms | Firmware |
+|---|---|
+| ESC, Express | 6.06+ |
+
+```clj
+(mutex-unlock mtx)
+```
+
+Unlock mutex mtx. If one or more contexts are waiting on this mutex the next one in the waiting queue will be unblocked.
+
+---
+
 ## Plotting
 
 VESC Tool can be used for plotting data. The easiest way to plot a variable is to just select it in the binding tab while "Poll Status" is active and go to the binding plot below the editor. The plot commands in this section make plots that show up in the "Experiment Plot" tab below the editor and allow more control over the plotting.
@@ -6362,6 +6520,20 @@ Rename file (same as moving a file). Returns true on success, nil otherwise.
 
 ---
 
+#### f-sync
+
+| Platforms | Firmware |
+|---|---|
+| Express | 6.06+ |
+
+```clj
+(f-sync file)
+```
+
+Write buffered changes to the memory card.
+
+---
+
 #### f-fatinfo
 
 | Platforms | Firmware |
@@ -6579,7 +6751,7 @@ Write data to qml-buffer at offset. Returns true on success or nil/timeout on fa
 (lbm-run running optCanId)
 ```
 
-Run or stop the lbm-code (run if running is 1, stop otherwise). Returns true on success or nil/timeout on failure. If the optional argument optCanId is omitted or set to -1 the command is performed locally, otherwise it is performed on the CAN-device with id optCanId.
+Run or stop the lbm-code (run if running is 1, stop otherwise). Returns true on success or nil/timeout on failure. If the optional argument optCanId is omitted or set to -1 the command is performed locally, otherwise it is performed on the CAN-device with id optCanId. If running is set to 1 and LispBM already is running a restart is performed.
 
 ---
 

@@ -378,7 +378,7 @@ static void blast_rgb565(uint8_t *dest, int dest_pitch, image_buffer_t *img) {
 
   uint32_t *w_dest = (uint32_t *)dest;
   for (int i = 0; i < num_pix; i ++) {
-    uint16_t pix = (((uint16_t)data[2 * i]) << 8) | ((uint16_t)data[2 * i + 1]);
+    uint16_t pix = (uint16_t)((((uint16_t)data[2 * i]) << 8) | ((uint16_t)data[2 * i + 1]));
 
     uint32_t r = (uint32_t)(pix >> 11);
     uint32_t g = (uint32_t)((pix >> 5) & 0x3F);
@@ -447,6 +447,7 @@ bool sdl_render_image(image_buffer_t *img, uint16_t x, uint16_t y, color_t *colo
     SDL_Rect dest = { x, y, w, h };
     SDL_RenderCopy(active_rend, tex, NULL, &dest);
     SDL_RenderPresent(active_rend);
+    SDL_DestroyTexture(tex);
   }
   return true;
 }
