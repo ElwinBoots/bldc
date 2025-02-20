@@ -4,6 +4,7 @@ build
 tools
 downloads
 package/
+vesc_tool.build/
 
 .dep
 .project
@@ -17,3 +18,9 @@ workspace.code-workspace
 *.pro.shared
 
 .vscode
+
+# temporary files
+*.log
+
+# temp ide settings
+*.settings
