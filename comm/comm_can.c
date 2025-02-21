@@ -1995,39 +1995,43 @@ static void decode_msg(uint32_t eid, uint8_t *data8, int len, bool is_replaced) 
 		} break;
 
 		case CAN_PACKET_TEST_ELWIN: {
-			mc_interface_set_pid_pos( *(float*)data8 ); //This works with data = struct.pack("<f", pos )
-			//mc_interface_set_pid_pos(buffer_get_float32_auto(data8, &ind)); //This works with data = struct.pack(">f", pos )
+			ind = 0;
+			mc_interface_set_pid_pos(buffer_get_float32_auto(data8, &ind));
 			timeout_reset();
 		}	break;
 
 		case CAN_PACKET_SET_POS_KP: {
+			ind = 0;
 			mc_configuration *mcconf = mempools_alloc_mcconf();
 			*mcconf = *mc_interface_get_configuration();
-			mcconf->p_pid_kp = *(float*)data8;
+			mcconf->p_pid_kp = buffer_get_float32_auto(data8, &ind);
 			mc_interface_set_configuration(mcconf);
 			mempools_free_mcconf(mcconf);
 		}	break;
 
 		case CAN_PACKET_SET_POS_KI: {
+			ind = 0;
 			mc_configuration *mcconf = mempools_alloc_mcconf();
 			*mcconf = *mc_interface_get_configuration();
-			mcconf->p_pid_ki = *(float*)data8;
+			mcconf->p_pid_ki = buffer_get_float32_auto(data8, &ind);
 			mc_interface_set_configuration(mcconf);
 			mempools_free_mcconf(mcconf);
 		}	break;
 
 		case CAN_PACKET_SET_POS_KD: {
+			ind = 0;
 			mc_configuration *mcconf = mempools_alloc_mcconf();
 			*mcconf = *mc_interface_get_configuration();
-			mcconf->p_pid_kd = *(float*)data8;
+			mcconf->p_pid_kd = buffer_get_float32_auto(data8, &ind);
 			mc_interface_set_configuration(mcconf);
 			mempools_free_mcconf(mcconf);
 		}	break;
 
 		case CAN_PACKET_SET_POS_FILTER: {
+			ind = 0;
 			mc_configuration *mcconf = mempools_alloc_mcconf();
 			*mcconf = *mc_interface_get_configuration();
-			mcconf->p_pid_kd_filter = *(float*)data8;
+			mcconf->p_pid_kd_filter = buffer_get_float32_auto(data8, &ind);
 			mc_interface_set_configuration(mcconf);
 			mempools_free_mcconf(mcconf);
 		}	break;
