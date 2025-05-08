@@ -656,6 +656,24 @@ void mc_interface_set_pid_pos(float pos) {
 	events_add("set_pid_pos", pos);
 }
 
+void mc_interface_set_max_sp_vel(float max_sp_vel) {
+	if (max_sp_vel > 0){
+		mcpwm_foc_set_max_sp_vel(max_sp_vel);
+	}
+}
+
+void mc_interface_set_max_sp_acel(float max_sp_acel) {
+	if (max_sp_acel > 0){
+		mcpwm_foc_set_max_sp_acel(max_sp_acel);
+	}
+}
+
+void mc_interface_set_max_sp_decel(float max_sp_acel) {
+	if (max_sp_acel > 0){
+		mcpwm_foc_set_max_sp_decel(max_sp_acel);
+	}
+}
+
 void mc_interface_set_current(float current) {
 	if (fabsf(current) > 0.001) {
 		SHUTDOWN_RESET();
@@ -1451,15 +1469,16 @@ float mc_interface_get_pid_pos_now(void) {
 		break;
 	}
 
+	//TODO: check if this is needed
 	if (encoder_is_configured()) {
 		if (conf->foc_encoder_inverted) {
 			ret *= -1.0;
 		}
 	}
 
-	ret *= DIR_MULT;
-	ret -= motor_now()->m_conf.p_pid_offset;
-	utils_norm_angle(&ret);
+//	ret *= DIR_MULT;
+//	ret -= motor_now()->m_conf.p_pid_offset;
+//	utils_norm_angle(&ret);
 
 	return ret;
 }

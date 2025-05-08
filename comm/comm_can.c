@@ -1236,8 +1236,9 @@ void comm_can_send_status4(uint8_t id, bool replace) {
 	uint8_t buffer[8];
 	buffer_append_int16(buffer, (int16_t)(mc_interface_temp_fet_filtered() * 1e1), &send_index);
 	buffer_append_int16(buffer, (int16_t)(mc_interface_temp_motor_filtered() * 1e1), &send_index);
-	buffer_append_int16(buffer, (int16_t)(mc_interface_get_tot_current_in_filtered() * 1e1), &send_index);
-	buffer_append_int16(buffer, (int16_t)(mc_interface_get_pid_pos_now() * 50.0), &send_index);
+//	buffer_append_int16(buffer, (int16_t)(mc_interface_get_tot_current_in_filtered() * 1e1), &send_index);
+//	buffer_append_int16(buffer, (int16_t)(mc_interface_get_pid_pos_now() * 50.0), &send_index);
+	buffer_append_float32_auto(buffer, mc_interface_get_pid_pos_now(), &send_index);
 	comm_can_transmit_eid_replace(id | ((uint32_t)CAN_PACKET_STATUS_4 << 8),
 			buffer, send_index, replace, 0);
 }
@@ -1994,12 +1995,6 @@ static void decode_msg(uint32_t eid, uint8_t *data8, int len, bool is_replaced) 
 					((uint32_t)CAN_PACKET_POLL_ROTOR_POS << 8), (uint8_t*)buffer, 4, true, 0);
 		} break;
 
-		case CAN_PACKET_TEST_ELWIN: {
-			ind = 0;
-			mc_interface_set_pid_pos(buffer_get_float32_auto(data8, &ind));
-			timeout_reset();
-		}	break;
-
 		case CAN_PACKET_SET_POS_KP: {
 			ind = 0;
 			mc_configuration *mcconf = mempools_alloc_mcconf();
@@ -2034,6 +2029,31 @@ static void decode_msg(uint32_t eid, uint8_t *data8, int len, bool is_replaced) 
 			mcconf->p_pid_kd_filter = buffer_get_float32_auto(data8, &ind);
 			mc_interface_set_configuration(mcconf);
 			mempools_free_mcconf(mcconf);
+		}	break;
+
+		case CAN_PACKET_SET_POS_FLOATINGPOINT: {
+			ind = 0;
+			float pos = buffer_get_float32_auto(data8, &ind);
+			if (len >= 8) {
+				mc_interface_set_max_sp_vel(buffer_get_float32_auto(data8, &ind));
+			}
+			mc_interface_set_pid_pos( pos );
+			timeout_reset();
+		}	break;
+
+		case CAN_PACKET_SET_MAX_SP_VEL: {
+			ind = 0;
+			mc_interface_set_max_sp_vel(buffer_get_float32_auto(data8, &ind));
+		}	break;
+
+		case CAN_PACKET_SET_MAX_SP_ACEL: {
+			ind = 0;
+			mc_interface_set_max_sp_acel(buffer_get_float32_auto(data8, &ind));
+		}	break;
+
+		case CAN_PACKET_SET_MAX_SP_DECEL: {
+			ind = 0;
+			mc_interface_set_max_sp_decel(buffer_get_float32_auto(data8, &ind));
 		}	break;
 
 		default:

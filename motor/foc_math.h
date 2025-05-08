@@ -21,8 +21,20 @@
 #define FOC_MATH_H_
 
 #include "datatypes.h"
+#define EPS_SETPOINT 1e-5
 
 // Types
+typedef struct tag_state{
+	float p;
+	float v;
+}state_struct_t, *pstate_struct_t;
+
+typedef struct tag_plan_limits{
+	float vmax;		/* maximum velocity */
+	float amax;		/* maximum acceleration */
+	float dmax;		/* maximum deceleration */
+}plan_limits_struct_t, *pplan_limits_struct_t;
+
 typedef struct {
 	float va;
 	float vb;
@@ -153,6 +165,12 @@ typedef struct {
 	float m_openloop_phase;
 	foc_pwm_mode m_pwm_mode;
 	float m_pos_pid_set;
+	float angle_set;
+	float vel_set;
+	float acel_set;
+	float max_sp_acel;
+	float max_sp_vel;
+	float max_sp_decel;
 	float m_speed_pid_set_rpm;
 	float m_speed_command_rpm;
 	float m_phase_now_observer;
@@ -258,5 +276,7 @@ float foc_correct_hall(float angle, float dt, motor_all_state_t *motor, int hall
 void foc_run_fw(motor_all_state_t *motor, float dt);
 void foc_hfi_adjust_angle(float ang_err, motor_all_state_t *motor, float dt);
 void foc_precalc_values(motor_all_state_t *motor);
+
+void foc_calculate_setpoint(pstate_struct_t pcurrent_state, pstate_struct_t prequested_state, pplan_limits_struct_t plimits, pstate_struct_t psetpoint, float dt);
 
 #endif /* FOC_MATH_H_ */

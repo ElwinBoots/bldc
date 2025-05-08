@@ -383,14 +383,10 @@ void foc_svm(float alpha, float beta, float max_mod, uint32_t PWMFullDutyCycle,
 
 void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *motor) {
 	mc_configuration *conf_now = motor->m_conf;
-
-	float angle_now = motor->m_pos_pid_now;
-	//float angle_set = motor->m_pos_pid_set;
-
-	//First basic setpoint generator, just a ramp.
-	static float angle_set;
-	utils_step_towards((float*)&angle_set, motor->m_pos_pid_set, conf_now->s_pid_ramp_erpms_s * dt);
-
+	state_struct_t requested_state;
+	plan_limits_struct_t limits;
+	static state_struct_t setpoint = {0.0, 0.0};
+	static state_struct_t setpoint_prev = {0.0, 0.0};
 	float p_term;
 	float d_term;
 
@@ -402,8 +398,21 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 		return;
 	}
 
-	// Compute parameters
-	float error = angle_set - angle_now;
+	//Generate setpoint
+	requested_state.p = motor->m_pos_pid_set; /* requested position */
+	requested_state.v = 0.0;
+	limits.amax       = motor->max_sp_acel; /* max acceleration */
+	limits.vmax       = motor->max_sp_vel; /* max velocity */
+	limits.dmax       = motor->max_sp_decel; /* max deceleration */
+	foc_calculate_setpoint( &setpoint_prev, &requested_state, &limits, &setpoint , dt);
+
+	motor->angle_set = setpoint.p;
+	motor->vel_set = setpoint.v;
+	motor->acel_set = (setpoint.v - setpoint_prev.v)/dt;
+	setpoint_prev = setpoint;
+
+	// error in radians. setpoint and pos_pid_now are in rev
+	float error = (motor->angle_set - motor->m_pos_pid_now ) * (2.0 * M_PI);
 
 	//TODO; improve. error should not be sign swapped.
 	if (conf_now->m_sensor_port_mode != SENSOR_PORT_MODE_HALL) {
@@ -417,9 +426,9 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float kd = conf_now->p_pid_kd;
 //	float kd_proc = conf_now->p_pid_kd_proc;
 
-	if (conf_now->p_pid_gain_dec_angle > 0.1 && motor->m_pos_pid_set == angle_set) {
+	if (conf_now->p_pid_gain_dec_angle > 0.1 && motor->m_pos_pid_set == motor->angle_set) {
 		float min_error = conf_now->p_pid_gain_dec_angle;
-		float error_abs = fabs(error);
+		float error_abs = fabsf(error);
 
 		if (error_abs < min_error) {
 			float scale = error_abs / min_error;
@@ -741,3 +750,126 @@ void foc_precalc_values(motor_all_state_t *motor) {
 	motor->m_observer_state.lambda_est = conf_now->foc_motor_flux_linkage;
 	motor->p_duty_norm = TWO_BY_SQRT3 / conf_now->foc_overmod_factor;
 }
+
+void foc_calculate_setpoint(pstate_struct_t pcurrent_state, pstate_struct_t prequested_state, pplan_limits_struct_t plimits, pstate_struct_t psetpoint, float dt)
+{
+	float v0 = pcurrent_state->v;
+	float vm = fmaxf(plimits->vmax , EPS_SETPOINT);
+	float am = fmaxf(plimits->amax , EPS_SETPOINT);
+	float dm = fmaxf(plimits->dmax , EPS_SETPOINT);
+
+	/* helper variables */
+	float sqrt_arg = 0;
+	float dx = 0;
+	int dir = 1;
+	int dir_v0 = 1;
+	int calc_setpoint = 1;
+	float TA = 0, TB = 0, T1 = 0, T2 = 0, T3 = 0;
+	float x0, x1, x2, x3;
+	float v1;
+
+	float disp = prequested_state->p - pcurrent_state->p;
+
+	/* check if converged */
+	//if(fabsf(disp) <= EPS_SETPOINT && fabsf(v0) <= EPS_SETPOINT) {
+	if(fabsf(disp) <= EPS_SETPOINT && fabsf(v0) <= EPS_SETPOINT) {
+		psetpoint->v = 0;
+		psetpoint->p = prequested_state->p;
+		return;
+	}
+
+	/* reverse if displacement and initial velocity are smaller than zero */
+	if(disp <= 0 && v0 <= 0) {
+		disp = -disp;
+		v0 = -v0;
+		dir = -1;
+	} else if(v0 < 0) {
+		dir_v0 = -1;
+	}
+
+	/* if the current velocity is higher than the maximum velocity, decelerate to vmax */
+ 	if(fabsf(v0) > vm + 2 * EPS_SETPOINT) {
+		v0 = fabsf(v0);
+		TA = (v0 - vm) / dm;
+		x0 = 0.5 * (v0 * v0 - vm * vm) / dm;
+		if(TA > dt) {
+			psetpoint->v = dir_v0 * (v0 - dm * dt);
+			dx = dir_v0 * (v0 * dt - 0.5 * dm * dt * dt);
+		} else {
+			psetpoint->v = dir_v0 * vm;
+			dx = dir_v0 * (v0 * TA - 0.5 * dm * (TA * TA) + vm * (dt - TA));
+		}
+		disp = disp - dir_v0 * x0;
+		v0 = dir_v0 * vm;
+		calc_setpoint = 0;
+	}
+
+	/* Check if we will have overshoot. If yes, decelerate to zero velocity and continue with the
+	 * planner below
+	 */
+	if(dir_v0 * (disp + EPS_SETPOINT) < 0.5 * (v0 * v0) / dm) {
+		v0 = fabsf(v0);
+		x0 = 0.5 * (v0 * v0) / dm;
+		TB = v0 / dm;
+		if(calc_setpoint) {
+			if(TB > dt) {
+				psetpoint->v = dir_v0 * (v0 - dm * dt);
+				dx = dir_v0 * (v0 * dt - 0.5 * dm * dt * dt);
+			} else {
+				psetpoint->v = dir_v0 * (v0 - dm * TB);
+				dx = dir_v0 * (v0 * TB - 0.5 * dm * TB * TB);
+			}
+			calc_setpoint = 0;
+		}
+		disp = x0 - disp;
+		v0 = 0;
+	}
+
+	/* check if the displacement is large enough to reach the maximum speed */
+	if(disp >= 0.5 * (vm * vm - v0 * v0) / am + 0.5 * (vm * vm) / dm) {
+		/* displacement is large enough to reach the maximum speed. */
+		x1 = 0.5 * (vm * vm - v0 * v0) / am; /* displacement during acceleration phase */
+		x3 = 0.5 * (vm * vm) / dm; /* displacement during deceleration phase */
+		x2 = disp - x1 - x3; /* displacement during constant velocity phase */
+		T1 = (vm - v0) / am; /* duration acceleration phase */
+		T2 = x2 / vm; /* duration constant velocity phase */
+		T3 = vm / dm; /* duration deceleration phase */
+		if(calc_setpoint) {
+			if(T1 > dt) {
+				psetpoint->v = v0 + am * dt;
+				dx = v0 * dt + 0.5 * am * dt * dt;
+			} else if((T1 + T2) > dt) {
+				psetpoint->v = vm;
+				dx = v0 * T1 + 0.5 * am * T1 * T1 + vm * (dt - T1);
+			} else {
+				psetpoint->v = vm - dm * (dt - T1 - T2);
+				dx = v0 * T1 + 0.5 * am * T1 * T1 + vm * T2 + vm * (dt - T1 -T2) - 0.5 * dm * (dt - T1 - T2) * (dt - T1 - T2);
+			}
+		}
+	} else if(disp + EPS_SETPOINT >= 0.5 * (v0 * fabsf(v0)) / dm) {
+		/* displacement is not large enough to reach the maximum speed. */
+		sqrt_arg = (2 * disp + v0 * v0 / am) * am * dm / (am + dm);
+		/* the fabs in the next argument is only there to prevent NANs, the argument can become
+		 * negative due to rounding errors.
+		 */
+		v1 = sqrt(fabsf(sqrt_arg)); /* intermediate peak velocity */
+		T1 = (v1 - v0) / am; /* duration acceleration phase */
+		T3 = v1 / dm; /* duration deceleration phase */
+		if(calc_setpoint) {
+			if(T1 > dt) {
+				psetpoint->v = v0 + am * dt;
+				dx = v0 * dt + 0.5 * am * dt * dt;
+			} else if(T1 + T3 > dt) {
+				psetpoint->v = v0 + am * T1 - dm * (dt - T1);
+				dx = v0 * T1 + 0.5 * am * T1 * T1 + v1 * (dt - T1) - 0.5 * dm * (dt - T1) * (dt - T1);
+			} else {
+				psetpoint->v = v0 + am * T1 - dm * (T1 + T3);
+				dx = v0 * T1 + 0.5 * am * T1 * T1 + v1 * (T3) - 0.5 * dm * (T3) * (T3);
+			}
+		}
+	}
+	psetpoint->p = pcurrent_state->p + dir * dx;
+	psetpoint->v = dir * psetpoint->v;
+
+}
+

@@ -778,6 +778,18 @@ void mcpwm_foc_set_pid_pos(float pos) {
 	}
 }
 
+void mcpwm_foc_set_max_sp_vel(float max_sp_vel) {
+	get_motor_now()->max_sp_vel = max_sp_vel;
+}
+
+void mcpwm_foc_set_max_sp_acel(float max_sp_acel) {
+	get_motor_now()->max_sp_acel = max_sp_acel;
+}
+
+void mcpwm_foc_set_max_sp_decel(float max_sp_decel) {
+	get_motor_now()->max_sp_decel = max_sp_decel;
+}
+
 /**
  * Use current control and specify a goal current to use. The sign determines
  * the direction of the torque. Absolute values less than
@@ -3657,16 +3669,16 @@ void mcpwm_foc_adc_int_handler(void *p, uint32_t flags) {
 
 
 	if (angle_now < 90.0 && motor_now->m_pid_div_angle_last > 270.0) {
-		motor_now->m_pid_div_angle_accumulator += 360.0 ;
+		motor_now->m_pid_div_angle_accumulator += 1.0 ;
 	} else if (angle_now > 270.0 && motor_now->m_pid_div_angle_last < 90.0) {
-		motor_now->m_pid_div_angle_accumulator -= 360.0 ;
+		motor_now->m_pid_div_angle_accumulator -= 1.0 ;
 	}
 	motor_now->m_pid_div_angle_last = angle_now;
 	if (conf_now->m_sensor_port_mode == SENSOR_PORT_MODE_HALL){
-		motor_now->m_pos_pid_now = (motor_now->m_pid_div_angle_accumulator + angle_now) * 2.0 / (float)conf_now->si_motor_poles ;
+		motor_now->m_pos_pid_now = (motor_now->m_pid_div_angle_accumulator + (angle_now / 360.0 )) * 2.0 / (float)conf_now->si_motor_poles ;
 	}
 	else{
-		motor_now->m_pos_pid_now = motor_now->m_pid_div_angle_accumulator + angle_now ;
+		motor_now->m_pos_pid_now = motor_now->m_pid_div_angle_accumulator + (angle_now / 360.0 ) ;
 	}
 
 
