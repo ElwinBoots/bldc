@@ -2056,6 +2056,13 @@ static void decode_msg(uint32_t eid, uint8_t *data8, int len, bool is_replaced) 
 			mc_interface_set_max_sp_decel(buffer_get_float32_auto(data8, &ind));
 		}	break;
 
+		case CAN_PACKET_SET_CURRENT_PID_POS: {
+			ind = 0;
+			float pos = buffer_get_float32_auto(data8, &ind);
+			bool store = data8[ind++];
+			mc_interface_update_pid_pos_offset(pos, store);
+		} break;
+
 		default:
 			break;
 		}
