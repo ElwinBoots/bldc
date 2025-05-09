@@ -656,21 +656,21 @@ void mc_interface_set_pid_pos(float pos) {
 	events_add("set_pid_pos", pos);
 }
 
-void mc_interface_set_max_sp_vel(float max_sp_vel) {
-	if (max_sp_vel > 0){
-		mcpwm_foc_set_max_sp_vel(max_sp_vel);
+void mc_interface_set_max_sp_vel(float val) {
+	if (val > 0){
+		mcpwm_foc_set_max_sp_vel(val);
 	}
 }
 
-void mc_interface_set_max_sp_acel(float max_sp_acel) {
-	if (max_sp_acel > 0){
-		mcpwm_foc_set_max_sp_acel(max_sp_acel);
+void mc_interface_set_max_sp_accel(float val) {
+	if (val > 0){
+		mcpwm_foc_set_max_sp_accel(val);
 	}
 }
 
-void mc_interface_set_max_sp_decel(float max_sp_acel) {
-	if (max_sp_acel > 0){
-		mcpwm_foc_set_max_sp_decel(max_sp_acel);
+void mc_interface_set_max_sp_decel(float val) {
+	if (val > 0){
+		mcpwm_foc_set_max_sp_decel(val);
 	}
 }
 
@@ -1452,6 +1452,7 @@ float mc_interface_get_pid_pos_set(void) {
 
 float mc_interface_get_pid_pos_now(void) {
 	float ret = 0.0;
+	float pos = 0.0;
 
 	volatile mc_configuration *conf = &motor_now()->m_conf;
 
@@ -1462,7 +1463,9 @@ float mc_interface_get_pid_pos_now(void) {
 		break;
 
 	case MOTOR_TYPE_FOC:
-		ret = mcpwm_foc_get_pid_pos_now();
+		pos = mcpwm_foc_get_pid_pos_now();
+		pos *= DIR_MULT;
+		ret = pos - motor_now()->m_conf.p_pid_offset;
 		break;
 
 	default:
@@ -1491,7 +1494,6 @@ void mc_interface_update_pid_pos_offset(float angle_now, bool store) {
 	*mcconf = *mc_interface_get_configuration();
 
 	mcconf->p_pid_offset += mc_interface_get_pid_pos_now() - angle_now;
-	utils_norm_angle(&mcconf->p_pid_offset);
 
 	if (store) {
 		conf_general_store_mc_configuration(mcconf, mc_interface_get_motor_thread() == 2);

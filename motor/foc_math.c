@@ -401,7 +401,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	//Generate setpoint
 	requested_state.p = motor->m_pos_pid_set; /* requested position */
 	requested_state.v = 0.0;
-	limits.amax       = motor->max_sp_acel; /* max acceleration */
+	limits.amax       = motor->max_sp_accel; /* max acceleration */
 	limits.vmax       = motor->max_sp_vel; /* max velocity */
 	limits.dmax       = motor->max_sp_decel; /* max deceleration */
 	foc_calculate_setpoint( &setpoint_prev, &requested_state, &limits, &setpoint , dt);

@@ -168,7 +168,7 @@ typedef struct {
 	float angle_set;
 	float vel_set;
 	float acel_set;
-	float max_sp_acel;
+	float max_sp_accel;
 	float max_sp_vel;
 	float max_sp_decel;
 	float m_speed_pid_set_rpm;

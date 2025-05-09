@@ -2046,9 +2046,9 @@ static void decode_msg(uint32_t eid, uint8_t *data8, int len, bool is_replaced) 
 			mc_interface_set_max_sp_vel(buffer_get_float32_auto(data8, &ind));
 		}	break;
 
-		case CAN_PACKET_SET_MAX_SP_ACEL: {
+		case CAN_PACKET_SET_MAX_SP_ACCEL: {
 			ind = 0;
-			mc_interface_set_max_sp_acel(buffer_get_float32_auto(data8, &ind));
+			mc_interface_set_max_sp_accel(buffer_get_float32_auto(data8, &ind));
 		}	break;
 
 		case CAN_PACKET_SET_MAX_SP_DECEL: {

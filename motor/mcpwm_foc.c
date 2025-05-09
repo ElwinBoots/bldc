@@ -778,16 +778,16 @@ void mcpwm_foc_set_pid_pos(float pos) {
 	}
 }
 
-void mcpwm_foc_set_max_sp_vel(float max_sp_vel) {
-	get_motor_now()->max_sp_vel = max_sp_vel;
+void mcpwm_foc_set_max_sp_vel(float val) {
+	get_motor_now()->max_sp_vel = val;
 }
 
-void mcpwm_foc_set_max_sp_acel(float max_sp_acel) {
-	get_motor_now()->max_sp_acel = max_sp_acel;
+void mcpwm_foc_set_max_sp_accel(float val) {
+	get_motor_now()->max_sp_accel = val;
 }
 
-void mcpwm_foc_set_max_sp_decel(float max_sp_decel) {
-	get_motor_now()->max_sp_decel = max_sp_decel;
+void mcpwm_foc_set_max_sp_decel(float val) {
+	get_motor_now()->max_sp_decel = val;
 }
 
 /**
