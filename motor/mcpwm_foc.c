@@ -366,6 +366,9 @@ void mcpwm_foc_init(mc_configuration *conf_m1, mc_configuration *conf_m2) {
 	foc_precalc_values((motor_all_state_t*)&m_motor_1);
 	update_hfi_samples(m_motor_1.m_conf->foc_hfi_samples, &m_motor_1);
 	init_audio_state(&m_motor_1.m_audio);
+	m_motor_1.max_sp_accel = 2;
+	m_motor_1.max_sp_decel = 2;
+	m_motor_1.max_sp_vel = 1;
 
 #ifdef HW_HAS_DUAL_MOTORS
 	memset((void*)&m_motor_2, 0, sizeof(motor_all_state_t));
@@ -378,6 +381,9 @@ void mcpwm_foc_init(mc_configuration *conf_m1, mc_configuration *conf_m2) {
 	foc_precalc_values((motor_all_state_t*)&m_motor_2);
 	update_hfi_samples(m_motor_2.m_conf->foc_hfi_samples, &m_motor_2);
 	init_audio_state(&m_motor_2.m_audio);
+	m_motor_2.max_sp_accel = 2;
+	m_motor_2.max_sp_decel = 2;
+	m_motor_2.max_sp_vel = 1;
 #endif
 
 	virtual_motor_init(conf_m1);
