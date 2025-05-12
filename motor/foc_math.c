@@ -408,7 +408,7 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 
 	motor->angle_set = setpoint.p;
 	motor->vel_set = setpoint.v;
-	motor->acel_set = (setpoint.v - setpoint_prev.v)/dt;
+	motor->accel_set = (setpoint.v - setpoint_prev.v)/dt;
 	setpoint_prev = setpoint;
 
 	// error in radians. setpoint and pos_pid_now are in rev
@@ -424,53 +424,52 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 	float kp = conf_now->p_pid_kp;
 	float ki = conf_now->p_pid_ki;
 	float kd = conf_now->p_pid_kd;
-//	float kd_proc = conf_now->p_pid_kd_proc;
-
 	if (conf_now->p_pid_gain_dec_angle > 0.1 && motor->m_pos_pid_set == motor->angle_set) {
 		float min_error = conf_now->p_pid_gain_dec_angle;
-		float error_abs = fabsf(error);
-
+		float error_abs = fabsf(error) * 360.0 / (2.0 * M_PI);
 		if (error_abs < min_error) {
 			float scale = error_abs / min_error;
 			kp *= scale;
 			ki *= scale;
 			kd *= scale;
-//			kd_proc *= scale;
 		}
 	}
 
+	// Note: Torque = 1.5 * Npp * lambda * iq = 0.75 * Npoles * lambda * iq
+	// These could be calculated once, instead of every loop
+	float Kt_Nm_perApeak = 0.75f * (float)conf_now->si_motor_poles * conf_now->foc_motor_flux_linkage;
+	float Apeak_toNm = 1.0f / Kt_Nm_perApeak;
+	float max_torque = conf_now->l_current_max * Kt_Nm_perApeak;
+
 	p_term = error * kp;
-	utils_truncate_number_abs(&p_term, conf_now->l_current_max);
 
 	motor->m_pos_i_term += error * (ki * dt);
 
 	d_term = (error - motor->m_pos_prev_error) * (kd / dt);
 
 	// I-term wind-up protection
-	utils_truncate_number_abs((float*)&motor->m_pos_i_term, conf_now->l_current_max - fabsf(p_term));
+	utils_truncate_number_abs((float*)&motor->m_pos_i_term, max_torque);
 
 	// Store previous error
 	motor->m_pos_prev_error = error;
 
 	// Calculate output
-	float output = p_term + motor->m_pos_i_term + d_term;
+	float output_torque = p_term + motor->m_pos_i_term + d_term;
 	// Filter everything
-	UTILS_LP_FAST(motor->m_pos_d_filter, output, conf_now->p_pid_kd_filter);
-	output = motor->m_pos_d_filter;
+	UTILS_LP_FAST(motor->m_pos_d_filter, output_torque, conf_now->p_pid_kd_filter);
+	output_torque = motor->m_pos_d_filter;
 
-	utils_truncate_number(&output, -conf_now->l_current_max, conf_now->l_current_max);
+	utils_truncate_number_abs(&output_torque, max_torque);
 
 	if (conf_now->m_sensor_port_mode != SENSOR_PORT_MODE_HALL) {
 		if (index_found) {
-//			motor->m_iq_set = output * conf_now->l_current_max * conf_now->l_current_max_scale;
-			motor->m_iq_set = output; // Output is current in [A]
+			motor->m_iq_set = output_torque * Apeak_toNm; // Output is current in [A]
 		} else {
 			// Rotate the motor with 40 % power until the encoder index is found.
 			motor->m_iq_set = 0.4 * conf_now->l_current_max * conf_now->l_current_max_scale;;
 		}
 	} else {
-//		motor->m_iq_set = output * conf_now->l_current_max * conf_now->l_current_max_scale;;
-		motor->m_iq_set = output; // Output is current in [A]
+		motor->m_iq_set = output_torque * Apeak_toNm; // Output is current in [A]
 	}
 }
 
