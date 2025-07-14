@@ -395,6 +395,13 @@ void foc_run_pid_control_pos(bool index_found, float dt, motor_all_state_t *moto
 		motor->m_pos_i_term = 0;
 		motor->m_pos_prev_error = 0;
 		motor->m_pos_d_filter = 0.0;
+		//Controller off, set setpoint equal to current position
+		setpoint.p = motor->m_pos_pid_now;
+		setpoint.v = 0;
+		motor->angle_set = setpoint.p;
+		motor->vel_set = setpoint.v;
+		motor->accel_set = (setpoint.v - setpoint_prev.v)/dt;
+		setpoint_prev = setpoint;
 		return;
 	}
 
